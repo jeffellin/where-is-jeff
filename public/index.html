@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Where the hell is Jeff?</title>
+  <meta name="description" content="Jeff's live travel status — see where he is right now." />
+  <meta property="og:title" content="Where the hell is Jeff?" />
+  <meta property="og:description" content="Live travel status — see where Jeff is right now." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=JetBrains+Mono:wght@300;400&family=Playfair+Display:ital,wght@0,700;1,400&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Reset & Variables ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1219;
+      --surface: #1a1f2e;
+      --surface-alt: #151926;
+      --border: rgba(255,255,255,0.06);
+      --text: #e8e4df;
+      --text-dim: rgba(255,255,255,0.4);
+      --text-faint: rgba(255,255,255,0.2);
+      --accent: #E87952;
+      --accent-glow: rgba(232,121,82,0.4);
+      --green: #4ADE80;
+      --green-glow: rgba(74,222,128,0.4);
+      --blue: #60A5FA;
+      --mono: 'JetBrains Mono', monospace;
+      --sans: 'DM Sans', system-ui, sans-serif;
+      --serif: 'Playfair Display', serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 48px 20px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Animations ── */
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.15); }
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-12px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+
+    /* ── Layout ── */
+    .container {
+      max-width: 420px;
+      width: 100%;
+      animation: fadeUp 0.8s ease-out;
+    }
+
+    /* ── Header ── */
+    .header { margin-bottom: 36px; }
+    .header__label {
+      font-size: 11px;
+      font-family: var(--mono);
+      color: rgba(255,255,255,0.45);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .header__title {
+      font-size: 36px;
+      font-family: var(--serif);
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: -0.01em;
+    }
+    .header__title .accent { color: var(--accent); }
+
+    /* ── Status Card ── */
+    .card {
+      background: linear-gradient(145deg, var(--surface) 0%, var(--surface-alt) 100%);
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      margin-bottom: 20px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+
+    .card__map {
+      position: relative;
+      width: 100%;
+      height: 220px;
+      border-radius: 12px 12px 0 0;
+      overflow: hidden;
+    }
+    .card__map iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      filter: invert(1) hue-rotate(180deg) saturate(0.3) brightness(0.6) contrast(1.2);
+      pointer-events: none;
+    }
+    .card__map-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(26,31,46,0.3) 0%, rgba(26,31,46,0.6) 100%);
+      pointer-events: none;
+    }
+    .card__map-pin {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #E87952;
+      border: 2px solid #fff;
+      box-shadow: 0 0 16px rgba(232,121,82,0.5), 0 0 32px rgba(232,121,82,0.25);
+      pointer-events: none;
+    }
+    .card__map-pin::after {
+      content: '';
+      position: absolute;
+      top: -8px; left: -8px;
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(232,121,82,0.3);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    .card__map-label {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(8px);
+      border-radius: 6px;
+      padding: 4px 10px;
+      color: rgba(255,255,255,0.7);
+      font-size: 11px;
+      font-family: var(--mono);
+      letter-spacing: 0.02em;
+    }
+
+    .card__body { padding: 20px 24px 24px; }
+
+    /* Live indicator */
+    .live {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .live__dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    .live__dot--home { background: var(--green); box-shadow: 0 0 12px var(--green-glow); }
+    .live__dot--away { background: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
+    .live__label {
+      font-size: 11px;
+      font-family: var(--mono);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .live__label--home { color: var(--green); }
+    .live__label--away { color: var(--accent); }
+
+    /* City display */
+    .city-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .city-row svg { color: var(--text-dim); flex-shrink: 0; position: relative; top: 2px; }
+    .city-name {
+      font-size: 28px;
+      font-family: var(--serif);
+      font-weight: 700;
+      color: #fff;
+    }
+    .city-region {
+      font-size: 14px;
+      color: var(--text-dim);
+      margin-bottom: 16px;
+      padding-left: 22px;
+    }
+
+    /* Status message */
+    .status-msg {
+      background: rgba(255,255,255,0.04);
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 14px;
+      line-height: 1.6;
+      color: rgba(255,255,255,0.65);
+    }
+    .status-msg .hl { color: #fff; font-weight: 500; }
+    .status-msg .city-hl { color: var(--accent); font-weight: 500; }
+
+    /* ── Upcoming Trips ── */
+    .upcoming-label {
+      font-size: 11px;
+      font-family: var(--mono);
+      color: rgba(255,255,255,0.45);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      padding-left: 4px;
+    }
+    .upcoming-list { display: flex; flex-direction: column; gap: 8px; }
+
+    .trip-row {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .trip-row__left { display: flex; align-items: center; gap: 14px; }
+    .trip-row__icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .trip-row__icon--flight { background: rgba(232,121,82,0.15); color: var(--accent); }
+    .trip-row__icon--train { background: rgba(96,165,250,0.15); color: var(--blue); }
+    .trip-row__icon--drive { background: rgba(74,222,128,0.15); color: var(--green); }
+    .trip-row__city { font-size: 15px; font-weight: 500; color: #fff; }
+    .trip-row__dates { font-size: 12px; color: rgba(255,255,255,0.55); margin-top: 2px; }
+    .trip-row__countdown {
+      font-size: 11px;
+      font-family: var(--mono);
+      color: rgba(255,255,255,0.45);
+      white-space: nowrap;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      margin-top: 36px;
+      padding: 16px 0;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .footer__text {
+      font-size: 11px;
+      font-family: var(--mono);
+      color: rgba(255,255,255,0.3);
+    }
+    .footer__time { color: rgba(255,255,255,0.25); }
+
+    /* ── Loading skeleton ── */
+    .skeleton {
+      background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 8px;
+    }
+
+    /* ── Error state ── */
+    .error-msg {
+      background: rgba(255,80,80,0.08);
+      border: 1px solid rgba(255,80,80,0.15);
+      border-radius: 12px;
+      padding: 20px 24px;
+      text-align: center;
+      color: rgba(255,255,255,0.6);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .error-msg code {
+      display: block;
+      margin-top: 8px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: rgba(255,255,255,0.3);
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="app">
+    <!-- Loading state -->
+    <div class="header">
+      <div class="header__label">Live Location</div>
+      <h1 class="header__title">Where the hell is Jeff<span class="accent">?</span></h1>
+    </div>
+    <div class="card">
+      <div style="padding: 24px;">
+        <div class="skeleton" style="width: 100%; height: 180px; margin-bottom: 20px;"></div>
+        <div class="skeleton" style="width: 60%; height: 20px; margin-bottom: 12px;"></div>
+        <div class="skeleton" style="width: 80%; height: 16px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Configuration ──
+    const API_URL = "/api/trips";
+    const REFRESH_INTERVAL = 15 * 60 * 1000; // 15 minutes
+
+    // ── SVG Icons ──
+    const ICONS = {
+      pin: `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" opacity="0.6"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`,
+      plane: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2L16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.3c.4-.2.6-.6.5-1.1z"/></svg>`,
+      train: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="16" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="M8 19l-2 3"/><path d="M16 19l2 3"/><circle cx="8" cy="15" r="1"/><circle cx="16" cy="15" r="1"/></svg>`,
+      home: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
+      car: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14M5 17a2 2 0 01-2-2V9a2 2 0 012-2h1l2-3h8l2 3h1a2 2 0 012 2v6a2 2 0 01-2 2M5 17v2m14-2v2"/><circle cx="7.5" cy="14" r="1.5"/><circle cx="16.5" cy="14" r="1.5"/></svg>`,
+    };
+
+    function modeIcon(mode) {
+      if (mode === "flight") return ICONS.plane;
+      if (mode === "train") return ICONS.train;
+      if (mode === "drive") return ICONS.car;
+      return ICONS.home;
+    }
+
+    function modeClass(mode) {
+      if (mode === "train") return "train";
+      if (mode === "drive") return "drive";
+      return "flight";
+    }
+
+    // ── Helpers ──
+    function formatDate(dateStr) {
+      const d = new Date(dateStr + "T00:00:00");
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    }
+
+    function daysUntil(dateStr) {
+      const now = new Date(); now.setHours(0,0,0,0);
+      const target = new Date(dateStr + "T00:00:00");
+      return Math.ceil((target - now) / (1000 * 60 * 60 * 24));
+    }
+
+    function getCurrentStatus(trips, home) {
+      const today = new Date(); today.setHours(0,0,0,0);
+      for (const trip of trips) {
+        const s = new Date(trip.start + "T00:00:00");
+        const e = new Date(trip.end + "T00:00:00");
+        if (today >= s && today < e) return { type: "current", trip };
+      }
+      const upcoming = trips.filter(t => new Date(t.start + "T00:00:00") > today)
+        .sort((a, b) => new Date(a.start) - new Date(b.start));
+      if (upcoming.length > 0) return { type: "home_until", nextTrip: upcoming[0] };
+      return { type: "home" };
+    }
+
+    // ── Map ──
+    // Uses OpenStreetMap tiles via an iframe embed — dark-styled with CSS filters
+    function buildMapHtml(lat, lng, city, zoom) {
+      zoom = zoom || 10;
+      // Use OpenStreetMap embed
+      const src = `https://www.openstreetmap.org/export/embed.html?bbox=${lng-0.8}%2C${lat-0.4}%2C${lng+0.8}%2C${lat+0.4}&layer=mapnik&marker=${lat}%2C${lng}`;
+      return `
+        <div class="card__map">
+          <iframe src="${src}" loading="lazy"></iframe>
+          <div class="card__map-overlay"></div>
+          <div class="card__map-pin"></div>
+          <div class="card__map-label">${city}</div>
+        </div>`;
+    }
+
+    // ── Render ──
+    function render(data) {
+      const { home, trips } = data;
+      const status = getCurrentStatus(trips, home);
+      const isHome = status.type === "home" || status.type === "home_until";
+      const currentCity = isHome ? home.city : status.trip?.city || home.city;
+      const currentRegion = isHome ? home.region : (status.trip?.region || "");
+      const currentLat = isHome ? home.lat : (status.trip?.lat || home.lat);
+      const currentLng = isHome ? home.lng : (status.trip?.lng || home.lng);
+
+      const now = new Date();
+      const upcoming = trips
+        .filter(t => new Date(t.start + "T00:00:00") > now)
+        .sort((a, b) => new Date(a.start) - new Date(b.start))
+        .slice(0, 5);
+
+      // Status message — use non-breaking space in city names to prevent line breaks
+      const nbsp = (str) => str.replace(/\s/g, '\u00A0');
+      let statusHtml = "";
+      if (status.type === "home_until") {
+        statusHtml = `Jeff is home until <span class="hl">${formatDate(status.nextTrip.start)}</span>, then heading to <span class="city-hl">${nbsp(status.nextTrip.city)}</span>.`;
+      } else if (status.type === "current") {
+        statusHtml = `Jeff is in <span class="city-hl">${nbsp(status.trip.city)}</span> until <span class="hl">${formatDate(status.trip.end)}</span>.`;
+      } else {
+        statusHtml = `Jeff is home. No upcoming trips scheduled.`;
+      }
+
+      // Upcoming rows
+      let upcomingHtml = "";
+      if (upcoming.length > 0) {
+        const rows = upcoming.map((trip, i) => {
+          const days = daysUntil(trip.start);
+          return `
+            <div class="trip-row" style="animation: slideIn 0.5s ease-out ${0.1 + i*0.1}s both;">
+              <div class="trip-row__left">
+                <div class="trip-row__icon trip-row__icon--${modeClass(trip.mode)}">${modeIcon(trip.mode)}</div>
+                <div>
+                  <div class="trip-row__city">${trip.city}</div>
+                  <div class="trip-row__dates">${formatDate(trip.start)} – ${formatDate(trip.end)}</div>
+                </div>
+              </div>
+              <div class="trip-row__countdown">${days > 0 ? `in ${days}d` : "now"}</div>
+            </div>`;
+        }).join("");
+
+        upcomingHtml = `
+          <div class="upcoming-label">Upcoming</div>
+          <div class="upcoming-list">${rows}</div>`;
+      }
+
+      document.getElementById("app").innerHTML = `
+        <div class="header">
+          <div class="header__label">Live Location</div>
+          <h1 class="header__title">Where the hell is Jeff<span class="accent">?</span></h1>
+        </div>
+
+        <div class="card">
+          ${buildMapHtml(currentLat, currentLng, currentCity)}
+          <div class="card__body">
+            <div class="live">
+              <div class="live__dot ${isHome ? 'live__dot--home' : 'live__dot--away'}"></div>
+              <span class="live__label ${isHome ? 'live__label--home' : 'live__label--away'}">${isHome ? "Home Base" : "Traveling"}</span>
+            </div>
+            <div class="city-row">
+              <span>${ICONS.pin}</span>
+              <h2 class="city-name">${currentCity}</h2>
+            </div>
+            <div class="city-region">${currentRegion}</div>
+            <div class="status-msg">${statusHtml}</div>
+          </div>
+        </div>
+
+        ${upcomingHtml}
+
+        <div class="footer">
+          <div class="footer__text">Auto-synced from calendar</div>
+          <div class="footer__text footer__time">Updated ${now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</div>
+        </div>`;
+    }
+
+    function renderError(err) {
+      document.getElementById("app").innerHTML = `
+        <div class="header">
+          <div class="header__label">Live Location</div>
+          <h1 class="header__title">Where the hell is Jeff<span class="accent">?</span></h1>
+        </div>
+        <div class="error-msg">
+          Couldn't load travel data. The calendar sync may need to be reconfigured.
+          <code>${err}</code>
+        </div>`;
+    }
+
+    // ── Fetch & Refresh ──
+    async function loadTrips() {
+      try {
+        const res = await fetch(API_URL);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.detail || "API error");
+        render(data);
+      } catch (err) {
+        console.error("Failed to load trips:", err);
+        renderError(err.message);
+      }
+    }
+
+    // Initial load
+    loadTrips();
+
+    // Auto-refresh
+    setInterval(loadTrips, REFRESH_INTERVAL);
+  </script>
+</body>
+</html>
