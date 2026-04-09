@@ -50,7 +50,7 @@ const AIRPORT_CITIES = {
   BNA: "Nashville", MEM: "Memphis", MSY: "New Orleans",
   JAX: "Jacksonville", RSW: "Fort Myers", PBI: "West Palm Beach",
   SJC: "San Jose", SMF: "Sacramento", BUR: "Burbank",
-  HNL: "Honolulu", OGG: "Maui",
+  HNL: "Honolulu", OGG: "Maui", LAS: "Las Vegas",
   // International
   NRT: "Tokyo", HND: "Tokyo", KIX: "Osaka",
   LHR: "London", LGW: "London", STN: "London",
@@ -321,12 +321,12 @@ function parseEvent(event) {
 
   // "Flight to [City]"
   const flightTo = title.match(/(?:flight|fly|flying)\s+to\s+(.+)/i);
-  if (flightTo) { city = flightTo[1].trim(); mode = "flight"; }
+  if (flightTo) { city = flightTo[1].replace(/\s*\(.*\)\s*$/, "").trim(); mode = "flight"; }
 
   // "Train to [City]"
   if (!city) {
     const trainTo = title.match(/(?:amtrak|train)\s+to\s+(.+)/i);
-    if (trainTo) { city = trainTo[1].trim(); mode = "train"; }
+    if (trainTo) { city = trainTo[1].replace(/\s*\(.*\)\s*$/, "").trim(); mode = "train"; }
   }
 
   // "ABC → DEF" airport codes (non-Flighty, no description)
@@ -351,6 +351,10 @@ function parseEvent(event) {
   if (!city) return null;
   city = city.replace(/[.!?]$/, "").trim();
 
+  // Extract flight/train number from parentheses e.g. "Flight to Las Vegas (AA 1525)"
+  const parenMatch = (event.summary || "").match(/\(([^)]+)\)/);
+  const manualNumber = parenMatch ? parenMatch[1].trim() : null;
+
   return {
     id: event.id,
     city,
@@ -360,6 +364,16 @@ function parseEvent(event) {
     end,
     mode,
     _legType: "manual",
+    _detail: {
+      type: mode === "train" ? "train" : "flight",
+      carrier: null,
+      flightNumber: manualNumber,
+      from: originCity || location || null,
+      to: city,
+      departureDate: start,
+      departure: formatDetailTime(event.start?.dateTime),
+      arrival: formatDetailTime(event.end?.dateTime),
+    },
   };
 }
 
@@ -474,6 +488,16 @@ function mergeLegsIntoTrips(legs, homeCity) {
         currentTrip.end = leg.start;
         result.push({ ...currentTrip });
         currentTrip = null;
+      } else if (legOrigin && !isHomeCity(legOrigin, homeVariants)) {
+        // ── ORPHANED RETURN — no outbound was recorded (e.g. booked outside Flighty) ──
+        // We know where they're returning from; use the return date as the trip end
+        result.push({
+          city: legOrigin,
+          start: leg.start,
+          end: leg.start,
+          mode: leg.mode,
+          _orphanReturn: true,
+        });
       }
 
     } else if (!originIsHome && !destIsHome && legDest) {
@@ -530,7 +554,7 @@ function mergeLegsIntoTrips(legs, homeCity) {
 
   // Clean up internal flags
   return result.map(t => {
-    const { _pendingDeparture, ...clean } = t;
+    const { _pendingDeparture, _orphanReturn, ...clean } = t;
     return clean;
   });
 }
@@ -599,6 +623,7 @@ const CITY_COORDS = {
   dublin: { lat: 53.3498, lng: -6.2603 },
   lisbon: { lat: 38.7223, lng: -9.1393 },
   honolulu: { lat: 21.3069, lng: -157.8583 },
+  "las vegas": { lat: 36.1699, lng: -115.1398 },
   bangkok: { lat: 13.7563, lng: 100.5018 },
   osaka: { lat: 34.6937, lng: 135.5023 },
   "tel aviv": { lat: 32.0853, lng: 34.7818 },
@@ -627,8 +652,8 @@ function getCoords(city) {
 
 // ── Deduplication ──
 function deduplicateTrips(trips) {
-  // Remove trips with no resolved destination, and same-day flight layovers
-  const filtered = trips.filter(t => t.city && (t.mode !== "flight" || t.start !== t.end));
+  // Remove trips with no resolved destination, and same-day flight layovers (but keep orphaned returns)
+  const filtered = trips.filter(t => t.city && (t.mode !== "flight" || t.start !== t.end || t._orphanReturn));
 
   // Merge consecutive trips to the same city with overlapping or adjacent dates
   const sorted = [...filtered].sort((a, b) => a.start.localeCompare(b.start));

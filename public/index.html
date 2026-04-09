@@ -508,7 +508,7 @@
       const trainTo   = leg.toStation   || leg.to;
       const route = isTrain || isDrive
         ? (trainTo ? `${trainFrom} → ${trainTo}` : trainFrom)
-        : `${leg.fromCode} → ${leg.toCode}`;
+        : `${leg.fromCode || leg.from || "?"} → ${leg.toCode || leg.to || "?"}`;
 
       const depDateStr  = leg.departureDate ? formatDate(leg.departureDate) : null;
       const arrDateStr  = leg.arrivalDate   ? formatDate(leg.arrivalDate)   : null;
