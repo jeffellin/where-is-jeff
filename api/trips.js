@@ -44,7 +44,7 @@ const AIRPORT_CITIES = {
   DTW: "Detroit", TPA: "Tampa", MCO: "Orlando",
   SLC: "Salt Lake City",
   DCA: "Washington DC", IAD: "Washington DC", BWI: "Baltimore",
-  RDU: "Raleigh", CLT: "Charlotte", PHL: "Philadelphia",
+  RDU: "Raleigh", CLT: "Charlotte", PHL: "Philadelphia", CHS: "Charleston",
   PIT: "Pittsburgh", CLE: "Cleveland", CVG: "Cincinnati",
   MCI: "Kansas City", STL: "St. Louis", IND: "Indianapolis",
   BNA: "Nashville", MEM: "Memphis", MSY: "New Orleans",
@@ -205,6 +205,8 @@ function parseEvent(event) {
         toCode: destCode,
         from: originCity,
         to: city,
+        departureDate: start,
+        arrivalDate: end,
         departure: depMatch ? depMatch[1].trim() : null,
         arrival: arrMatch ? arrMatch[1].trim() : null,
         bookingCode: bookingMatch ? bookingMatch[1] : null,
@@ -236,6 +238,7 @@ function parseEvent(event) {
           carrier: "Amtrak",
           flightNumber: trainName,
           from: city,
+          departureDate: start,
           departure: formatDetailTime(event.start?.dateTime),
           arrival: formatDetailTime(event.end?.dateTime),
           reservation: reservationMatch ? reservationMatch[1] : null,
@@ -270,9 +273,45 @@ function parseEvent(event) {
           fromStation: stationMatch ? stationMatch[1].trim() : null,
           toStation: stationMatch ? stationMatch[2].trim() : null,
           from: city,
+          departureDate: start,
           departure: formatDetailTime(event.start?.dateTime),
           reservation: reservationMatch ? reservationMatch[1] : null,
           seat: seatMatch ? seatMatch[1].trim() : null,
+        },
+      };
+    }
+  }
+
+  // ── Car/Drive events ──
+  // Title: "Car: DCA-CHS" or "Drive: Washington-Charleston" or "Car: DCA→CHS"
+  const carMatch = title.match(/^(?:car|drive|driving|road\s*trip):\s*(.+)/i);
+  if (carMatch) {
+    const route = carMatch[1].trim();
+    const parts = route.split(/\s*(?:->|[–→-])\s*/);
+    if (parts.length >= 2) {
+      const destRaw = parts[parts.length - 1].trim();
+      const originRaw = parts[0].trim();
+      city = AIRPORT_CITIES[destRaw.toUpperCase()] || destRaw;
+      originCity = AIRPORT_CITIES[originRaw.toUpperCase()] || originRaw;
+    } else {
+      city = route;
+    }
+    mode = "drive";
+    if (city) {
+      return {
+        id: event.id,
+        city,
+        originCity: originCity || null,
+        region: location || "",
+        start,
+        end,
+        mode,
+        _legType: "manual",
+        _detail: {
+          type: "drive",
+          from: originCity || null,
+          to: city,
+          departureDate: start,
         },
       };
     }
@@ -388,8 +427,9 @@ function mergeLegsIntoTrips(legs, homeCity) {
         legDest = "home";
       }
     } else {
-      // Manual entries: city is the destination
+      // Manual entries: city is the destination; use originCity if provided
       legDest = leg.city;
+      if (leg.originCity) legOrigin = leg.originCity;
     }
 
     const originIsHome = legOrigin === "home" || isHomeCity(legOrigin, homeVariants);
@@ -550,6 +590,7 @@ const CITY_COORDS = {
   pittsburgh: { lat: 40.4406, lng: -79.9959 },
   albany: { lat: 42.6526, lng: -73.7562 },
   savannah: { lat: 32.0809, lng: -81.0912 },
+  charleston: { lat: 32.7765, lng: -79.9311 },
   jacksonville: { lat: 30.3322, lng: -81.6557 },
   nashville: { lat: 36.1627, lng: -86.7816 },
   charlotte: { lat: 35.2271, lng: -80.8431 },
@@ -586,8 +627,8 @@ function getCoords(city) {
 
 // ── Deduplication ──
 function deduplicateTrips(trips) {
-  // Remove same-day trips (layovers / transit legs with no overnight stay)
-  const filtered = trips.filter(t => t.start !== t.end);
+  // Remove same-day flight trips (layovers) — keep drive/train since they may be single-day events
+  const filtered = trips.filter(t => t.mode !== "flight" || t.start !== t.end);
 
   // Merge consecutive trips to the same city with overlapping or adjacent dates
   const sorted = [...filtered].sort((a, b) => a.start.localeCompare(b.start));

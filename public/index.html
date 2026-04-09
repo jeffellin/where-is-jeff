@@ -500,21 +500,33 @@
 
     function renderLegDetail(leg) {
       const isTrain = leg.type === "train";
-      const icon = isTrain ? ICONS.train : ICONS.plane;
-      const iconClass = isTrain ? "train" : "flight";
+      const isDrive = leg.type === "drive";
+      const icon = isTrain ? ICONS.train : isDrive ? ICONS.car : ICONS.plane;
+      const iconClass = isTrain ? "train" : isDrive ? "drive" : "flight";
 
       const trainFrom = leg.fromStation || leg.from;
       const trainTo   = leg.toStation   || leg.to;
-      const route = isTrain
+      const route = isTrain || isDrive
         ? (trainTo ? `${trainFrom} → ${trainTo}` : trainFrom)
         : `${leg.fromCode} → ${leg.toCode}`;
 
-      const timesHtml = isTrain
-        ? (leg.departure ? `<div class="modal-leg__time"><span>Dep</span> ${leg.departure}</div>` : "")
-        : [
-            leg.departure ? `<div class="modal-leg__time"><span>Dep</span> ${leg.departure}</div>` : "",
-            leg.arrival   ? `<div class="modal-leg__time"><span>Arr</span> ${leg.arrival}</div>`   : "",
-          ].join("");
+      const depDateStr  = leg.departureDate ? formatDate(leg.departureDate) : null;
+      const arrDateStr  = leg.arrivalDate   ? formatDate(leg.arrivalDate)   : null;
+      const redEye      = leg.arrivalDate && leg.departureDate && leg.arrivalDate !== leg.departureDate;
+      const depLabel    = depDateStr ? `${depDateStr} · ${leg.departure || ""}` : (leg.departure || "");
+      const arrLabel    = leg.arrival ? `${redEye ? arrDateStr + ' · ' : ''}${leg.arrival}` : null;
+
+      const timesHtml = isDrive
+        ? (depDateStr ? `<div class="modal-leg__time"><span>Date</span> ${depDateStr}</div>` : "")
+        : isTrain
+          ? [
+              depLabel ? `<div class="modal-leg__time"><span>Dep</span> ${depLabel}</div>` : "",
+              leg.arrival ? `<div class="modal-leg__time"><span>Arr</span> ${leg.arrival}</div>` : "",
+            ].join("")
+          : [
+              depLabel ? `<div class="modal-leg__time"><span>Dep</span> ${depLabel}</div>` : "",
+              arrLabel ? `<div class="modal-leg__time"><span>Arr</span> ${arrLabel}${redEye ? ' <span style="color:var(--accent);font-size:10px;">+1</span>' : ''}</div>` : "",
+            ].join("");
 
       const tags = [
         leg.flightNumber  ? `<span class="modal-leg__tag">${leg.flightNumber}</span>`   : "",
