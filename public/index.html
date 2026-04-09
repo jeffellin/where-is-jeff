@@ -403,6 +403,166 @@
       color: rgba(255,255,255,0.45);
     }
 
+    /* ── Intro Animation ── */
+    @keyframes scanSweep {
+      0%   { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    @keyframes ringPulse {
+      0%   { transform: translate(-50%,-50%) scale(0.6); opacity: 0.8; }
+      100% { transform: translate(-50%,-50%) scale(1.6); opacity: 0; }
+    }
+    @keyframes reticleIn {
+      0%   { opacity: 0; transform: scale(1.4); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    @keyframes introFadeOut {
+      0%   { opacity: 1; }
+      100% { opacity: 0; pointer-events: none; }
+    }
+    @keyframes cornerSlide {
+      from { opacity: 0; transform: scale(0); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+    @keyframes typeIn {
+      from { width: 0; }
+      to   { width: 100%; }
+    }
+    @keyframes lockOn {
+      0%   { stroke-dashoffset: 200; opacity: 0; }
+      40%  { opacity: 1; }
+      100% { stroke-dashoffset: 0; opacity: 1; }
+    }
+    @keyframes targetShake {
+      0%, 100% { transform: translate(-50%,-50%) rotate(0deg); }
+      20%  { transform: translate(-52%,-50%) rotate(-1deg); }
+      40%  { transform: translate(-48%,-52%) rotate(1deg); }
+      60%  { transform: translate(-51%,-48%) rotate(-0.5deg); }
+      80%  { transform: translate(-49%,-51%) rotate(0.5deg); }
+    }
+    @keyframes targetLocked {
+      0%   { stroke: var(--accent); }
+      50%  { stroke: #fff; }
+      100% { stroke: var(--accent); }
+    }
+
+    #intro-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+    }
+    #intro-overlay.fade-out {
+      animation: introFadeOut 0.6s ease-out forwards;
+    }
+
+    .intro-reticle {
+      position: relative;
+      width: 200px;
+      height: 200px;
+      animation: reticleIn 0.5s ease-out;
+    }
+
+    /* corner brackets */
+    .intro-reticle .corner {
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      border-color: var(--accent);
+      border-style: solid;
+      opacity: 0;
+    }
+    .intro-reticle .corner-tl { top: 0; left: 0; border-width: 2px 0 0 2px; animation: cornerSlide 0.3s ease-out 0.3s forwards; transform-origin: top left; }
+    .intro-reticle .corner-tr { top: 0; right: 0; border-width: 2px 2px 0 0; animation: cornerSlide 0.3s ease-out 0.4s forwards; transform-origin: top right; }
+    .intro-reticle .corner-bl { bottom: 0; left: 0; border-width: 0 0 2px 2px; animation: cornerSlide 0.3s ease-out 0.5s forwards; transform-origin: bottom left; }
+    .intro-reticle .corner-br { bottom: 0; right: 0; border-width: 0 2px 2px 0; animation: cornerSlide 0.3s ease-out 0.6s forwards; transform-origin: bottom right; }
+
+    .intro-reticle svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* scan ring */
+    .scan-ring {
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 170px; height: 170px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(232,121,82,0.2);
+      transform: translate(-50%,-50%);
+    }
+    .scan-sweep {
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 170px; height: 170px;
+      transform-origin: center;
+      transform: translate(-50%,-50%);
+      animation: scanSweep 1.8s linear 0.2s 2;
+    }
+
+    /* ring ripple */
+    .ring-ripple {
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 170px; height: 170px;
+      border-radius: 50%;
+      border: 1px solid rgba(232,121,82,0.5);
+      animation: ringPulse 1.5s ease-out infinite;
+    }
+    .ring-ripple:nth-child(2) { animation-delay: 0.5s; }
+    .ring-ripple:nth-child(3) { animation-delay: 1s; }
+
+    /* crosshairs */
+    .crosshair-h, .crosshair-v {
+      position: absolute;
+      top: 50%; left: 50%;
+      background: rgba(232,121,82,0.25);
+    }
+    .crosshair-h { width: 170px; height: 1px; transform: translate(-50%,-50%); }
+    .crosshair-v { width: 1px; height: 170px; transform: translate(-50%,-50%); }
+
+    .intro-log {
+      margin-top: 32px;
+      width: 280px;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .log-line {
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .log-line.visible { opacity: 1; }
+    .log-line .prefix { color: rgba(232,121,82,0.6); flex-shrink: 0; }
+    .log-line .text { color: rgba(255,255,255,0.5); }
+    .log-line .text.highlight { color: var(--accent); font-weight: 500; }
+    .log-line .text.success { color: var(--green); font-weight: 500; }
+
+    .intro-cursor {
+      display: inline-block;
+      width: 6px; height: 11px;
+      background: var(--accent);
+      margin-left: 2px;
+      vertical-align: middle;
+      animation: blink 0.8s step-end infinite;
+    }
+
     /* ── Error state ── */
     .error-msg {
       background: rgba(255,80,80,0.08);
@@ -424,6 +584,56 @@
   </style>
 </head>
 <body>
+  <!-- Intro tracking animation -->
+  <div id="intro-overlay">
+    <div class="intro-reticle">
+      <!-- ripple rings -->
+      <div class="ring-ripple"></div>
+      <div class="ring-ripple"></div>
+      <div class="ring-ripple"></div>
+      <!-- static ring -->
+      <div class="scan-ring"></div>
+      <!-- crosshairs -->
+      <div class="crosshair-h"></div>
+      <div class="crosshair-v"></div>
+      <!-- corner brackets -->
+      <div class="corner corner-tl"></div>
+      <div class="corner corner-tr"></div>
+      <div class="corner corner-bl"></div>
+      <div class="corner corner-br"></div>
+      <!-- sweep arm -->
+      <div class="scan-sweep">
+        <svg viewBox="0 0 170 170" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="sweepGrad" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="rgba(232,121,82,0)" />
+              <stop offset="100%" stop-color="rgba(232,121,82,0)" />
+            </radialGradient>
+          </defs>
+          <!-- sweep wedge -->
+          <path d="M85,85 L85,0 A85,85 0 0,1 145,145 Z"
+                fill="url(#sweepFade)" opacity="0.15"/>
+          <line x1="85" y1="85" x2="85" y2="3"
+                stroke="rgba(232,121,82,0.8)" stroke-width="1.5"/>
+        </svg>
+      </div>
+      <!-- lock-on circle (appears later via JS) -->
+      <svg id="lock-svg" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;" viewBox="0 0 200 200">
+        <circle cx="100" cy="100" r="60"
+          fill="none" stroke="var(--accent)" stroke-width="2"
+          stroke-dasharray="377" stroke-dashoffset="377"
+          id="lock-circle"/>
+      </svg>
+    </div>
+
+    <div class="intro-log" id="intro-log">
+      <div class="log-line" id="ll-0">
+        <span class="prefix">›</span>
+        <span class="text">Initializing location tracker<span class="intro-cursor"></span></span>
+      </div>
+    </div>
+  </div>
+
   <div class="container" id="app">
     <!-- Loading state -->
     <div class="header">
@@ -440,6 +650,63 @@
   </div>
 
   <script>
+    // ── Intro Animation ──
+    let introResolveFn = null;
+    const introReady = new Promise(resolve => { introResolveFn = resolve; });
+
+    (function runIntro() {
+      const overlay  = document.getElementById("intro-overlay");
+      const log      = document.getElementById("intro-log");
+      const lockSvg  = document.getElementById("lock-svg");
+      const lockCirc = document.getElementById("lock-circle");
+
+      function addLine(prefix, text, cls, delay) {
+        return new Promise(res => {
+          setTimeout(() => {
+            const line = document.createElement("div");
+            line.className = "log-line";
+            line.innerHTML = `<span class="prefix">${prefix}</span><span class="text ${cls || ''}">${text}</span>`;
+            log.appendChild(line);
+            requestAnimationFrame(() => line.classList.add("visible"));
+            res();
+          }, delay);
+        });
+      }
+
+      // sequence
+      setTimeout(() => {
+        // show first line immediately
+        document.getElementById("ll-0").classList.add("visible");
+      }, 100);
+
+      Promise.resolve()
+        .then(() => addLine("›", "Scanning network nodes…", "", 900))
+        .then(() => addLine("›", "Triangulating signal…", "", 1700))
+        .then(() => {
+          // trigger lock-on animation
+          return new Promise(res => {
+            setTimeout(() => {
+              lockSvg.style.opacity = "1";
+              lockCirc.style.transition = "stroke-dashoffset 0.7s ease-out";
+              lockCirc.style.strokeDashoffset = "0";
+              lockCirc.style.stroke = "var(--accent)";
+              res();
+            }, 2400);
+          });
+        })
+        .then(() => addLine("●", "TARGET ACQUIRED", "success", 2900))
+        .then(() => addLine("›", "Loading details…", "highlight", 3400))
+        .then(() => {
+          // signal that intro is "done enough" — waits for data too
+          setTimeout(() => introResolveFn(), 3700);
+          // fade out after data arrives
+          introReady.then(() => {
+            overlay.classList.add("fade-out");
+            setTimeout(() => overlay.remove(), 650);
+          });
+        });
+    })();
+
     // ── Configuration ──
     const API_URL = "/api/trips";
     const REFRESH_INTERVAL = 15 * 60 * 1000; // 15 minutes
