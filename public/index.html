@@ -608,7 +608,7 @@
       const upcoming = trips
         .filter(t => new Date(t.start + "T00:00:00") > now)
         .sort((a, b) => new Date(a.start) - new Date(b.start))
-        .slice(0, 5);
+        .slice(0, 8);
 
       // Status message — use non-breaking space in city names to prevent line breaks
       const nbsp = (str) => str.replace(/\s/g, '\u00A0');

@@ -627,8 +627,8 @@ function getCoords(city) {
 
 // ── Deduplication ──
 function deduplicateTrips(trips) {
-  // Remove same-day flight trips (layovers) — keep drive/train since they may be single-day events
-  const filtered = trips.filter(t => t.mode !== "flight" || t.start !== t.end);
+  // Remove trips with no resolved destination, and same-day flight layovers
+  const filtered = trips.filter(t => t.city && (t.mode !== "flight" || t.start !== t.end));
 
   // Merge consecutive trips to the same city with overlapping or adjacent dates
   const sorted = [...filtered].sort((a, b) => a.start.localeCompare(b.start));
@@ -696,12 +696,27 @@ async function handler(req, res) {
     // Parse all events into legs, then merge into trips
     const legs = events.map(parseEvent).filter(Boolean);
 
-    // Collect display-worthy legs for trip popups
-    const displayLegs = legs
+    // Collect display-worthy legs for trip popups, merging duplicates
+    const rawDisplayLegs = legs
       .filter(l => l._detail)
       .map(({ start, end, mode, city, originCity, _detail }) => ({
         start, end, mode, city, originCity, ..._detail,
       }));
+
+    // Merge legs with the same date + mode + carrier (e.g. Amtrak app + Apple Wallet for same train)
+    const legGroups = new Map();
+    for (const leg of rawDisplayLegs) {
+      const key = `${leg.start}|${leg.mode}|${(leg.carrier || "").toLowerCase()}`;
+      if (legGroups.has(key)) {
+        const existing = legGroups.get(key);
+        for (const [k, v] of Object.entries(leg)) {
+          if (v != null && existing[k] == null) existing[k] = v;
+        }
+      } else {
+        legGroups.set(key, { ...leg });
+      }
+    }
+    const displayLegs = [...legGroups.values()];
 
     let trips = deduplicateTrips(mergeLegsIntoTrips(legs, homeCity));
 
