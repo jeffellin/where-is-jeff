@@ -93,6 +93,17 @@ function extractCityFromAmtrakAddress(address) {
   return cityStateZip.replace(/\s+\d{5}(-\d{4})?$/, "").trim() || null;
 }
 
+// ── City from "Station Name\nCity, ST" location (Apple Wallet / Amtrak web) ──
+function extractCityFromStationLocation(location) {
+  if (!location) return null;
+  const lines = location.split("\n").map(l => l.trim()).filter(Boolean);
+  const cityLine = lines[lines.length - 1]; // last line is "City, ST"
+  if (!cityLine) return null;
+  const match = cityLine.match(/^(.+?),\s*[A-Z]{2}$/);
+  if (match) return match[1].trim();
+  return cityLine.split(",")[0].trim() || null;
+}
+
 // ── Flighty description parsing ──
 /**
  * Extract destination city from Flighty's event description.
@@ -121,6 +132,14 @@ function extractOriginCityFromFlightyDesc(description) {
     return match[1].trim();
   }
   return null;
+}
+
+// ── Format a dateTime string for display ──
+function formatDetailTime(isoString) {
+  if (!isoString) return null;
+  return new Date(isoString).toLocaleTimeString("en-US", {
+    hour: "numeric", minute: "2-digit", timeZoneName: "short",
+  });
 }
 
 // ── Parse a single calendar event into a travel leg ──
@@ -164,15 +183,33 @@ function parseEvent(event) {
 
     mode = "flight";
 
+    const carrierLineMatch = description.match(/^([A-Za-z][A-Za-z ]+?)\s+(\d+)\s*$/m);
+    const depMatch = description.match(/↗\s*(.+)/);
+    const arrMatch = description.match(/↘\s*(.+)/);
+    const bookingMatch = description.match(/Booking Code:\s*(\S+)/);
+    const durationMatch = description.match(/Flight time\s+(.+)/);
+
     return {
       id: event.id,
-      city,          // destination city
-      originCity,    // origin city
+      city,
+      originCity,
       region: "",
       start,
       end,
       mode,
       _legType: "flighty",
+      _detail: {
+        type: "flight",
+        flightNumber: carrierLineMatch ? `${carrierLineMatch[1].trim()} ${carrierLineMatch[2]}` : null,
+        fromCode: originCode,
+        toCode: destCode,
+        from: originCity,
+        to: city,
+        departure: depMatch ? depMatch[1].trim() : null,
+        arrival: arrMatch ? arrMatch[1].trim() : null,
+        bookingCode: bookingMatch ? bookingMatch[1] : null,
+        duration: durationMatch ? durationMatch[1].trim() : null,
+      },
     };
   }
 
@@ -183,6 +220,8 @@ function parseEvent(event) {
     city = extractCityFromAmtrakAddress(location);
     mode = "train";
     if (city) {
+      const trainName = title.replace(/^amtrak:\s*/i, "").trim();
+      const reservationMatch = description.match(/reservation num\w*(?:\s*:\s*|\s+is\s+)(\w+)/i);
       return {
         id: event.id,
         city,
@@ -192,6 +231,49 @@ function parseEvent(event) {
         end,
         mode,
         _legType: "amtrak",
+        _detail: {
+          type: "train",
+          carrier: "Amtrak",
+          flightNumber: trainName,
+          from: city,
+          departure: formatDetailTime(event.start?.dateTime),
+          arrival: formatDetailTime(event.end?.dateTime),
+          reservation: reservationMatch ? reservationMatch[1] : null,
+        },
+      };
+    }
+  }
+
+  // ── Apple Wallet / Amtrak web events ──
+  // Title: "Train: Amtrak from Union Station to Moynihan Train Hall at Penn Sta."
+  // Location: "Station Name\nCity, ST"
+  const isAppleWalletTrain = /^train:\s*amtrak\s+from\s+/i.test(title);
+  if (isAppleWalletTrain) {
+    city = extractCityFromStationLocation(location);
+    mode = "train";
+    if (city) {
+      const reservationMatch = description.match(/Reservation Number:\s*(\S+)/i);
+      const seatMatch = description.match(/Seats?:\s*(.+)/i);
+      const stationMatch = title.match(/from\s+(.+?)\s+to\s+(.+)/i);
+      return {
+        id: event.id,
+        city,
+        originCity: null,
+        region: location,
+        start,
+        end,
+        mode,
+        _legType: "amtrak",
+        _detail: {
+          type: "train",
+          carrier: "Amtrak",
+          fromStation: stationMatch ? stationMatch[1].trim() : null,
+          toStation: stationMatch ? stationMatch[2].trim() : null,
+          from: city,
+          departure: formatDetailTime(event.start?.dateTime),
+          reservation: reservationMatch ? reservationMatch[1] : null,
+          seat: seatMatch ? seatMatch[1].trim() : null,
+        },
       };
     }
   }
@@ -545,7 +627,7 @@ async function handler(req, res) {
 
     const now = new Date();
     const timeMin = new Date(now); timeMin.setDate(timeMin.getDate() - 30);
-    const timeMax = new Date(now); timeMax.setDate(timeMax.getDate() + 90);
+    const timeMax = new Date(now); timeMax.setDate(timeMax.getDate() + 365);
 
     const response = await calendar.events.list({
       calendarId: process.env.GOOGLE_CALENDAR_ID,
@@ -572,6 +654,14 @@ async function handler(req, res) {
 
     // Parse all events into legs, then merge into trips
     const legs = events.map(parseEvent).filter(Boolean);
+
+    // Collect display-worthy legs for trip popups
+    const displayLegs = legs
+      .filter(l => l._detail)
+      .map(({ start, end, mode, city, originCity, _detail }) => ({
+        start, end, mode, city, originCity, ..._detail,
+      }));
+
     let trips = deduplicateTrips(mergeLegsIntoTrips(legs, homeCity));
 
     // Filter out trips with no destination or whose destination is home
@@ -588,7 +678,7 @@ async function handler(req, res) {
       lng: parseFloat(process.env.HOME_LNG) || -77.091,
     };
 
-    res.status(200).json({ ok: true, home, trips, fetched_at: new Date().toISOString() });
+    res.status(200).json({ ok: true, home, trips, legs: displayLegs, fetched_at: new Date().toISOString() });
   } catch (error) {
     console.error("Calendar API error:", error.message);
     res.status(500).json({ ok: false, error: "Failed to fetch calendar data", detail: error.message });

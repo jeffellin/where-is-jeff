@@ -231,7 +231,10 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      cursor: pointer;
+      transition: background 0.15s;
     }
+    .trip-row:hover { background: rgba(255,255,255,0.07); }
     .trip-row__left { display: flex; align-items: center; gap: 14px; }
     .trip-row__icon {
       width: 34px;
@@ -277,6 +280,129 @@
       border-radius: 8px;
     }
 
+    /* ── Modal ── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 20px;
+      animation: fadeUp 0.2s ease-out;
+    }
+    .modal-panel {
+      background: var(--surface);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px;
+      padding: 24px;
+      width: 100%;
+      max-width: 420px;
+      max-height: 75vh;
+      overflow-y: auto;
+      animation: fadeUp 0.25s ease-out;
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .modal-title {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .modal-dates {
+      font-size: 12px;
+      font-family: var(--mono);
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+    .modal-close {
+      background: rgba(255,255,255,0.08);
+      border: none;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      color: var(--text-dim);
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .modal-close:hover { background: rgba(255,255,255,0.14); color: #fff; }
+    .modal-section-label {
+      font-size: 10px;
+      font-family: var(--mono);
+      color: rgba(255,255,255,0.3);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .modal-leg {
+      display: flex;
+      gap: 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 8px;
+    }
+    .modal-leg__icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .modal-leg__icon--flight { background: rgba(232,121,82,0.15); color: var(--accent); }
+    .modal-leg__icon--train  { background: rgba(96,165,250,0.15); color: var(--blue); }
+    .modal-leg__body { flex: 1; min-width: 0; }
+    .modal-leg__route {
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 3px;
+    }
+    .modal-leg__number {
+      font-size: 12px;
+      font-family: var(--mono);
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+    .modal-leg__times {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 4px;
+    }
+    .modal-leg__time {
+      font-size: 12px;
+      color: rgba(255,255,255,0.6);
+    }
+    .modal-leg__time span { color: var(--text-dim); font-size: 11px; }
+    .modal-leg__meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .modal-leg__tag {
+      font-size: 10px;
+      font-family: var(--mono);
+      background: rgba(255,255,255,0.06);
+      border-radius: 4px;
+      padding: 2px 7px;
+      color: rgba(255,255,255,0.45);
+    }
+
     /* ── Error state ── */
     .error-msg {
       background: rgba(255,80,80,0.08);
@@ -317,6 +443,8 @@
     // ── Configuration ──
     const API_URL = "/api/trips";
     const REFRESH_INTERVAL = 15 * 60 * 1000; // 15 minutes
+
+    let allLegs = [];
 
     // ── SVG Icons ──
     const ICONS = {
@@ -365,6 +493,80 @@
       return { type: "home" };
     }
 
+    // ── Modal ──
+    function legsForTrip(trip) {
+      return allLegs.filter(l => l.start >= trip.start && l.start <= trip.end);
+    }
+
+    function renderLegDetail(leg) {
+      const isTrain = leg.type === "train";
+      const icon = isTrain ? ICONS.train : ICONS.plane;
+      const iconClass = isTrain ? "train" : "flight";
+
+      const trainFrom = leg.fromStation || leg.from;
+      const trainTo   = leg.toStation   || leg.to;
+      const route = isTrain
+        ? (trainTo ? `${trainFrom} → ${trainTo}` : trainFrom)
+        : `${leg.fromCode} → ${leg.toCode}`;
+
+      const timesHtml = isTrain
+        ? (leg.departure ? `<div class="modal-leg__time"><span>Dep</span> ${leg.departure}</div>` : "")
+        : [
+            leg.departure ? `<div class="modal-leg__time"><span>Dep</span> ${leg.departure}</div>` : "",
+            leg.arrival   ? `<div class="modal-leg__time"><span>Arr</span> ${leg.arrival}</div>`   : "",
+          ].join("");
+
+      const tags = [
+        leg.flightNumber  ? `<span class="modal-leg__tag">${leg.flightNumber}</span>`   : "",
+        leg.bookingCode   ? `<span class="modal-leg__tag">Code: ${leg.bookingCode}</span>` : "",
+        leg.reservation   ? `<span class="modal-leg__tag">Res: ${leg.reservation}</span>`  : "",
+        leg.seat          ? `<span class="modal-leg__tag">Seat: ${leg.seat}</span>`        : "",
+        leg.duration      ? `<span class="modal-leg__tag">${leg.duration}</span>`          : "",
+      ].join("");
+
+      return `
+        <div class="modal-leg">
+          <div class="modal-leg__icon modal-leg__icon--${iconClass}">${icon}</div>
+          <div class="modal-leg__body">
+            <div class="modal-leg__route">${route}</div>
+            ${leg.carrier ? `<div class="modal-leg__number">${leg.carrier}</div>` : ""}
+            <div class="modal-leg__times">${timesHtml}</div>
+            ${tags ? `<div class="modal-leg__meta">${tags}</div>` : ""}
+          </div>
+        </div>`;
+    }
+
+    function openModal(trip) {
+      const legs = legsForTrip(trip);
+      const legsHtml = legs.length
+        ? legs.map(renderLegDetail).join("")
+        : `<div style="color:rgba(255,255,255,0.4);font-size:13px;padding:8px 0;">No itinerary details available for this trip.</div>`;
+
+      const overlay = document.createElement("div");
+      overlay.className = "modal-overlay";
+      overlay.id = "modal-overlay";
+      overlay.innerHTML = `
+        <div class="modal-panel">
+          <div class="modal-header">
+            <div>
+              <div class="modal-title">${trip.city}</div>
+              <div class="modal-dates">${formatDate(trip.start)} – ${formatDate(trip.end)}</div>
+            </div>
+            <button class="modal-close" onclick="closeModal()">✕</button>
+          </div>
+          <div class="modal-section-label">Itinerary</div>
+          ${legsHtml}
+        </div>`;
+
+      overlay.addEventListener("click", e => { if (e.target === overlay) closeModal(); });
+      document.body.appendChild(overlay);
+    }
+
+    function closeModal() {
+      const el = document.getElementById("modal-overlay");
+      if (el) el.remove();
+    }
+
     // ── Map ──
     // Uses OpenStreetMap tiles via an iframe embed — dark-styled with CSS filters
     function buildMapHtml(lat, lng, city, zoom) {
@@ -410,10 +612,11 @@
       // Upcoming rows
       let upcomingHtml = "";
       if (upcoming.length > 0) {
+        window.__upcomingTrips = upcoming;
         const rows = upcoming.map((trip, i) => {
           const days = daysUntil(trip.start);
           return `
-            <div class="trip-row" style="animation: slideIn 0.5s ease-out ${0.1 + i*0.1}s both;">
+            <div class="trip-row" style="animation: slideIn 0.5s ease-out ${0.1 + i*0.1}s both;" data-trip-idx="${i}">
               <div class="trip-row__left">
                 <div class="trip-row__icon trip-row__icon--${modeClass(trip.mode)}">${modeIcon(trip.mode)}</div>
                 <div>
@@ -458,6 +661,14 @@
           <div class="footer__text">Auto-synced from calendar</div>
           <div class="footer__text footer__time">Updated ${now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</div>
         </div>`;
+
+      // Attach trip row click handlers after rendering
+      document.querySelectorAll(".trip-row[data-trip-idx]").forEach(row => {
+        row.addEventListener("click", () => {
+          const idx = parseInt(row.dataset.tripIdx);
+          openModal(window.__upcomingTrips[idx]);
+        });
+      });
     }
 
     function renderError(err) {
@@ -479,6 +690,7 @@
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (!data.ok) throw new Error(data.detail || "API error");
+        allLegs = data.legs || [];
         render(data);
       } catch (err) {
         console.error("Failed to load trips:", err);
