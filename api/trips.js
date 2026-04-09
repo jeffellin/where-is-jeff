@@ -135,10 +135,35 @@ function extractOriginCityFromFlightyDesc(description) {
 }
 
 // ── Format a dateTime string for display ──
-function formatDetailTime(isoString) {
+// Google Calendar dateTime values carry their UTC offset (e.g. "2024-03-15T14:30:00-05:00").
+// In a serverless environment the process timezone is UTC, so calling new Date().toLocaleTimeString()
+// without a timeZone option converts to UTC and shows the wrong time.
+// Strategy: use the explicit IANA timeZone from the calendar event when present; otherwise read
+// the local time digits straight from the ISO string (the offset already encodes local time).
+function formatDetailTime(isoString, timeZone) {
   if (!isoString) return null;
+
+  // Best case: Google Calendar gave us a named timezone (e.g. "America/New_York")
+  if (timeZone) {
+    return new Date(isoString).toLocaleTimeString("en-US", {
+      hour: "numeric", minute: "2-digit", timeZoneName: "short", timeZone,
+    });
+  }
+
+  // Good case: ISO string has a numeric offset — read the local time directly
+  // e.g. "2024-03-15T14:30:00-05:00" → the "14:30" IS the departure-city local time
+  const localMatch = isoString.match(/T(\d{2}):(\d{2})(?::\d{2})?[+-]\d/);
+  if (localMatch) {
+    const h = parseInt(localMatch[1], 10);
+    const m = localMatch[2];
+    const ampm = h >= 12 ? "PM" : "AM";
+    const hour12 = h % 12 || 12;
+    return `${hour12}:${m} ${ampm}`;
+  }
+
+  // Fallback (UTC "Z" suffix or no offset — server local time)
   return new Date(isoString).toLocaleTimeString("en-US", {
-    hour: "numeric", minute: "2-digit", timeZoneName: "short",
+    hour: "numeric", minute: "2-digit",
   });
 }
 
@@ -173,13 +198,14 @@ function parseEvent(event) {
     const originCode = flightyMatch[1];
     const destCode = flightyMatch[2];
 
-    // Prefer city names from description (more readable)
-    city = extractDestCityFromFlightyDesc(description);
-    originCity = extractOriginCityFromFlightyDesc(description);
+    // Airport code → city is the canonical, reliable source for home-city matching.
+    // Description parsing ("Washington, D.C. to Las Vegas") can produce strings that
+    // don't match home city aliases (e.g. comma/period variants), so we prefer the
+    // code lookup for originCity and use the description city only as a display fallback.
+    originCity = AIRPORT_CITIES[originCode] || extractOriginCityFromFlightyDesc(description) || originCode;
 
-    // Fallback to airport code lookup
-    if (!city) city = AIRPORT_CITIES[destCode] || destCode;
-    if (!originCity) originCity = AIRPORT_CITIES[originCode] || originCode;
+    // For the destination, description is fine (we don't need alias matching)
+    city = extractDestCityFromFlightyDesc(description) || AIRPORT_CITIES[destCode] || destCode;
 
     mode = "flight";
 
@@ -239,8 +265,8 @@ function parseEvent(event) {
           flightNumber: trainName,
           from: city,
           departureDate: start,
-          departure: formatDetailTime(event.start?.dateTime),
-          arrival: formatDetailTime(event.end?.dateTime),
+          departure: formatDetailTime(event.start?.dateTime, event.start?.timeZone),
+          arrival: formatDetailTime(event.end?.dateTime, event.end?.timeZone),
           reservation: reservationMatch ? reservationMatch[1] : null,
         },
       };
@@ -274,7 +300,7 @@ function parseEvent(event) {
           toStation: stationMatch ? stationMatch[2].trim() : null,
           from: city,
           departureDate: start,
-          departure: formatDetailTime(event.start?.dateTime),
+          departure: formatDetailTime(event.start?.dateTime, event.start?.timeZone),
           reservation: reservationMatch ? reservationMatch[1] : null,
           seat: seatMatch ? seatMatch[1].trim() : null,
         },
@@ -351,6 +377,15 @@ function parseEvent(event) {
   if (!city) return null;
   city = city.replace(/[.!?]$/, "").trim();
 
+  // If originCity still unknown, try to infer from the location field.
+  // Google Calendar often puts the departure airport name/code there (e.g. "Washington DCA").
+  if (!originCity && location) {
+    const locCode = location.match(/\b([A-Z]{3})\b/);
+    if (locCode && AIRPORT_CITIES[locCode[1]]) {
+      originCity = AIRPORT_CITIES[locCode[1]];
+    }
+  }
+
   // Extract flight/train number from parentheses e.g. "Flight to Las Vegas (AA 1525)"
   const parenMatch = (event.summary || "").match(/\(([^)]+)\)/);
   const manualNumber = parenMatch ? parenMatch[1].trim() : null;
@@ -371,8 +406,8 @@ function parseEvent(event) {
       from: originCity || location || null,
       to: city,
       departureDate: start,
-      departure: formatDetailTime(event.start?.dateTime),
-      arrival: formatDetailTime(event.end?.dateTime),
+      departure: formatDetailTime(event.start?.dateTime, event.start?.timeZone),
+      arrival: formatDetailTime(event.end?.dateTime, event.end?.timeZone),
     },
   };
 }
@@ -382,9 +417,9 @@ function buildHomeCityVariants(homeCity) {
   const base = homeCity.toLowerCase().trim();
   const variants = new Set([base]);
   const aliases = {
-    arlington: ["washington", "washington dc", "washington d.c."],
-    washington: ["washington dc", "washington d.c.", "arlington"],
-    "washington dc": ["washington", "washington d.c.", "arlington"],
+    arlington: ["washington", "washington dc", "washington d.c.", "baltimore"],
+    washington: ["washington dc", "washington d.c.", "arlington", "baltimore"],
+    "washington dc": ["washington", "washington d.c.", "arlington", "baltimore"],
     "new york": ["new york city", "nyc", "manhattan"],
     "los angeles": ["la"],
     "san francisco": ["sf"],
@@ -443,7 +478,16 @@ function mergeLegsIntoTrips(legs, homeCity) {
     } else {
       // Manual entries: city is the destination; use originCity if provided
       legDest = leg.city;
-      if (leg.originCity) legOrigin = leg.originCity;
+      if (leg.originCity) {
+        legOrigin = leg.originCity;
+      } else if (leg._detail?.from) {
+        // originCity wasn't parsed — try to salvage from the display "from" field.
+        // Extract an airport code if present (e.g. "Washington DCA" → "DCA" → "Washington DC")
+        const codeInFrom = leg._detail.from.match(/\b([A-Z]{3})\b/);
+        legOrigin = (codeInFrom && AIRPORT_CITIES[codeInFrom[1]])
+          ? AIRPORT_CITIES[codeInFrom[1]]
+          : leg._detail.from;
+      }
     }
 
     const originIsHome = legOrigin === "home" || isHomeCity(legOrigin, homeVariants);
@@ -451,16 +495,24 @@ function mergeLegsIntoTrips(legs, homeCity) {
 
     if (originIsHome && !destIsHome && legDest) {
       // ── LEAVING HOME for a known destination ──
-      if (currentTrip) {
-        // Close any open trip (shouldn't normally happen)
-        result.push({ ...currentTrip });
+      if (currentTrip && currentTrip.city &&
+          currentTrip.city.toLowerCase() === legDest.toLowerCase()) {
+        // Already tracking a trip to this city (e.g. backup/alternate flight) —
+        // absorb the leg into the existing trip rather than closing and reopening
+        if (leg.end > currentTrip.end) currentTrip.end = leg.end;
+      } else {
+        if (currentTrip) {
+          // Close any open trip (shouldn't normally happen)
+          result.push({ ...currentTrip });
+        }
+        currentTrip = {
+          city: legDest,
+          start: leg.start,
+          end: leg.end,
+          mode: leg.mode,
+          _fromHome: true, // real trip, not a connecting layover
+        };
       }
-      currentTrip = {
-        city: legDest,
-        start: leg.start,
-        end: leg.end,
-        mode: leg.mode,
-      };
 
     } else if (originIsHome && !legDest) {
       // ── LEAVING HOME, destination unknown (Amtrak outbound) ──
@@ -552,7 +604,7 @@ function mergeLegsIntoTrips(legs, homeCity) {
     }
   }
 
-  // Clean up internal flags
+  // Clean up internal-only flags (keep _fromHome so deduplicateTrips can use it)
   return result.map(t => {
     const { _pendingDeparture, _orphanReturn, ...clean } = t;
     return clean;
@@ -652,8 +704,11 @@ function getCoords(city) {
 
 // ── Deduplication ──
 function deduplicateTrips(trips) {
-  // Remove trips with no resolved destination, and same-day flight layovers (but keep orphaned returns)
-  const filtered = trips.filter(t => t.city && (t.mode !== "flight" || t.start !== t.end || t._orphanReturn));
+  // Remove trips with no resolved destination, and same-day flight layovers (but keep orphaned
+  // returns and trips that genuinely departed from home — those aren't layovers).
+  const filtered = trips
+    .filter(t => t.city && (t.mode !== "flight" || t.start !== t.end || t._orphanReturn || t._fromHome))
+    .map(({ _fromHome, ...t }) => t);
 
   // Merge consecutive trips to the same city with overlapping or adjacent dates
   const sorted = [...filtered].sort((a, b) => a.start.localeCompare(b.start));
@@ -728,10 +783,16 @@ async function handler(req, res) {
         start, end, mode, city, originCity, ..._detail,
       }));
 
-    // Merge legs with the same date + mode + carrier (e.g. Amtrak app + Apple Wallet for same train)
+    // Merge legs with the same date + mode + carrier (+ route for flights).
+    // Trains use only date+mode+carrier so Amtrak app and Apple Wallet events for the same
+    // ride merge correctly — they use different identifiers (train number vs station names).
+    // Flights include the route so same-day connecting legs with the same carrier stay distinct.
     const legGroups = new Map();
     for (const leg of rawDisplayLegs) {
-      const key = `${leg.start}|${leg.mode}|${(leg.carrier || "").toLowerCase()}`;
+      const route = leg.mode === "train" ? "" : (leg.flightNumber
+        ? leg.flightNumber.toLowerCase().replace(/\s+/g, "")
+        : `${(leg.fromCode || leg.from || "").toLowerCase()}-${(leg.toCode || leg.to || "").toLowerCase()}`);
+      const key = `${leg.start}|${leg.mode}|${(leg.carrier || "").toLowerCase()}|${route}`;
       if (legGroups.has(key)) {
         const existing = legGroups.get(key);
         for (const [k, v] of Object.entries(leg)) {
