@@ -462,14 +462,14 @@
       gap: 0;
     }
     #intro-overlay.fade-out {
-      animation: introFadeOut 0.6s ease-out forwards;
+      animation: introFadeOut 0.3s ease-out forwards;
     }
 
     .intro-reticle {
       position: relative;
       width: 200px;
       height: 200px;
-      animation: reticleIn 0.5s ease-out;
+      animation: reticleIn 0.25s ease-out;
     }
 
     /* corner brackets */
@@ -481,10 +481,10 @@
       border-style: solid;
       opacity: 0;
     }
-    .intro-reticle .corner-tl { top: 0; left: 0; border-width: 2px 0 0 2px; animation: cornerSlide 0.3s ease-out 0.3s forwards; transform-origin: top left; }
-    .intro-reticle .corner-tr { top: 0; right: 0; border-width: 2px 2px 0 0; animation: cornerSlide 0.3s ease-out 0.4s forwards; transform-origin: top right; }
-    .intro-reticle .corner-bl { bottom: 0; left: 0; border-width: 0 0 2px 2px; animation: cornerSlide 0.3s ease-out 0.5s forwards; transform-origin: bottom left; }
-    .intro-reticle .corner-br { bottom: 0; right: 0; border-width: 0 2px 2px 0; animation: cornerSlide 0.3s ease-out 0.6s forwards; transform-origin: bottom right; }
+    .intro-reticle .corner-tl { top: 0; left: 0; border-width: 2px 0 0 2px; animation: cornerSlide 0.15s ease-out 0.15s forwards; transform-origin: top left; }
+    .intro-reticle .corner-tr { top: 0; right: 0; border-width: 2px 2px 0 0; animation: cornerSlide 0.15s ease-out 0.2s forwards; transform-origin: top right; }
+    .intro-reticle .corner-bl { bottom: 0; left: 0; border-width: 0 0 2px 2px; animation: cornerSlide 0.15s ease-out 0.25s forwards; transform-origin: bottom left; }
+    .intro-reticle .corner-br { bottom: 0; right: 0; border-width: 0 2px 2px 0; animation: cornerSlide 0.15s ease-out 0.3s forwards; transform-origin: bottom right; }
 
     .intro-reticle svg {
       width: 100%;
@@ -506,7 +506,7 @@
       width: 170px; height: 170px;
       transform-origin: center;
       transform: translate(-50%,-50%);
-      animation: scanSweep 1.8s linear 0.2s 2;
+      animation: scanSweep 0.9s linear 0.1s 2;
     }
 
     /* ring ripple */
@@ -516,10 +516,10 @@
       width: 170px; height: 170px;
       border-radius: 50%;
       border: 1px solid rgba(232,121,82,0.5);
-      animation: ringPulse 1.5s ease-out infinite;
+      animation: ringPulse 0.75s ease-out infinite;
     }
-    .ring-ripple:nth-child(2) { animation-delay: 0.5s; }
-    .ring-ripple:nth-child(3) { animation-delay: 1s; }
+    .ring-ripple:nth-child(2) { animation-delay: 0.25s; }
+    .ring-ripple:nth-child(3) { animation-delay: 0.5s; }
 
     /* crosshairs */
     .crosshair-h, .crosshair-v {
@@ -675,34 +675,30 @@
 
       // sequence
       setTimeout(() => {
-        // show first line immediately
         document.getElementById("ll-0").classList.add("visible");
-      }, 100);
+      }, 50);
 
       Promise.resolve()
-        .then(() => addLine("›", "Scanning network nodes…", "", 900))
-        .then(() => addLine("›", "Triangulating signal…", "", 1700))
+        .then(() => addLine("›", "Scanning network nodes…", "", 450))
+        .then(() => addLine("›", "Triangulating signal…", "", 850))
         .then(() => {
-          // trigger lock-on animation
           return new Promise(res => {
             setTimeout(() => {
               lockSvg.style.opacity = "1";
-              lockCirc.style.transition = "stroke-dashoffset 0.7s ease-out";
+              lockCirc.style.transition = "stroke-dashoffset 0.35s ease-out";
               lockCirc.style.strokeDashoffset = "0";
               lockCirc.style.stroke = "var(--accent)";
               res();
-            }, 2400);
+            }, 1200);
           });
         })
-        .then(() => addLine("●", "TARGET ACQUIRED", "success", 2900))
-        .then(() => addLine("›", "Loading details…", "highlight", 3400))
+        .then(() => addLine("●", "TARGET ACQUIRED", "success", 1450))
+        .then(() => addLine("›", "Loading details…", "highlight", 1700))
         .then(() => {
-          // signal that intro is "done enough" — waits for data too
-          setTimeout(() => introResolveFn(), 3700);
-          // fade out after data arrives
+          setTimeout(() => introResolveFn(), 1850);
           introReady.then(() => {
             overlay.classList.add("fade-out");
-            setTimeout(() => overlay.remove(), 650);
+            setTimeout(() => overlay.remove(), 350);
           });
         });
     })();
@@ -970,9 +966,12 @@
         const data = await res.json();
         if (!data.ok) throw new Error(data.detail || "API error");
         allLegs = data.legs || [];
+        // Wait for intro animation before revealing content
+        await introReady;
         render(data);
       } catch (err) {
         console.error("Failed to load trips:", err);
+        await introReady;
         renderError(err.message);
       }
     }
