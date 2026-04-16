@@ -29,6 +29,60 @@
 
 const { google } = require("googleapis");
 
+// ── Amtrak station name → city mapping (for Apple Wallet train events) ──
+const AMTRAK_STATION_CITIES = {
+  "moynihan":           "New York",
+  "penn sta":           "New York",
+  "penn station":       "New York",
+  "grand central":      "New York",
+  "union station":      "Washington DC",   // NE corridor; also Chicago — acceptable for home context
+  "south station":      "Boston",
+  "back bay":           "Boston",
+  "north station":      "Boston",
+  "30th street":        "Philadelphia",
+  "william h gray":     "Philadelphia",
+  "trenton":            "Trenton",
+  "princeton junction": "Princeton",
+  "newark penn":        "Newark",
+  "new brunswick":      "New Brunswick",
+  "metropark":          "Iselin",
+  "stamford":           "Stamford",
+  "bridgeport":         "Bridgeport",
+  "new haven":          "New Haven",
+  "old saybrook":       "Old Saybrook",
+  "new london":         "New London",
+  "mystic":             "Mystic",
+  "providence":         "Providence",
+  "route 128":          "Boston",
+  "wilmington":         "Wilmington",
+  "baltimore":          "Baltimore",
+  "new carrollton":     "Washington DC",
+  "richmond":           "Richmond",
+  "norfolk":            "Norfolk",
+  "newport news":       "Newport News",
+  "raleigh":            "Raleigh",
+  "charlotte":          "Charlotte",
+  "savannah":           "Savannah",
+  "jacksonville":       "Jacksonville",
+  "miami":              "Miami",
+  "orlando":            "Orlando",
+  "tampa":              "Tampa",
+  "chicago":            "Chicago",
+  "los angeles":        "Los Angeles",
+  "new orleans":        "New Orleans",
+  "seattle":            "Seattle",
+  "portland":           "Portland",
+};
+
+function extractCityFromStationName(stationName) {
+  if (!stationName) return null;
+  const lower = stationName.toLowerCase();
+  for (const [key, city] of Object.entries(AMTRAK_STATION_CITIES)) {
+    if (lower.includes(key)) return city;
+  }
+  return null;
+}
+
 // ── Airport code → city mapping ──
 const AIRPORT_CITIES = {
   // US Major
@@ -51,6 +105,7 @@ const AIRPORT_CITIES = {
   JAX: "Jacksonville", RSW: "Fort Myers", PBI: "West Palm Beach",
   SJC: "San Jose", SMF: "Sacramento", BUR: "Burbank",
   HNL: "Honolulu", OGG: "Maui", LAS: "Las Vegas",
+  MSP: "Minneapolis",
   // International
   NRT: "Tokyo", HND: "Tokyo", KIX: "Osaka",
   LHR: "London", LGW: "London", STN: "London",
@@ -278,16 +333,26 @@ function parseEvent(event) {
   // Location: "Station Name\nCity, ST"
   const isAppleWalletTrain = /^train:\s*amtrak\s+from\s+/i.test(title);
   if (isAppleWalletTrain) {
-    city = extractCityFromStationLocation(location);
+    const departureCity = extractCityFromStationLocation(location);
     mode = "train";
-    if (city) {
+    if (departureCity) {
       const reservationMatch = description.match(/Reservation Number:\s*(\S+)/i);
       const seatMatch = description.match(/Seats?:\s*(.+)/i);
       const stationMatch = title.match(/from\s+(.+?)\s+to\s+(.+)/i);
+      const fromStation = stationMatch ? stationMatch[1].trim() : null;
+      const toStation = stationMatch ? stationMatch[2].trim() : null;
+
+      // Try to resolve the destination city from the station name in the title.
+      // If successful, treat this like a directional leg (city=dest, originCity=departure)
+      // so the merger can correctly open/close trips without needing a paired return leg.
+      const destCity = extractCityFromStationName(toStation);
+      city = destCity || departureCity;
+      const legOriginCity = destCity ? departureCity : null;
+
       return {
         id: event.id,
         city,
-        originCity: null,
+        originCity: legOriginCity,
         region: location,
         start,
         end,
@@ -296,9 +361,10 @@ function parseEvent(event) {
         _detail: {
           type: "train",
           carrier: "Amtrak",
-          fromStation: stationMatch ? stationMatch[1].trim() : null,
-          toStation: stationMatch ? stationMatch[2].trim() : null,
-          from: city,
+          fromStation,
+          toStation,
+          from: departureCity,
+          to: destCity || null,
           departureDate: start,
           departure: formatDetailTime(event.start?.dateTime, event.start?.timeZone),
           reservation: reservationMatch ? reservationMatch[1] : null,
@@ -345,14 +411,22 @@ function parseEvent(event) {
 
   // ── Manual patterns ──
 
-  // "Flight to [City]"
+  // "Flight to [City]" — also handles airport codes like "Flight to MSP" or "Flight to DCA"
   const flightTo = title.match(/(?:flight|fly|flying)\s+to\s+(.+)/i);
-  if (flightTo) { city = flightTo[1].replace(/\s*\(.*\)\s*$/, "").trim(); mode = "flight"; }
+  if (flightTo) {
+    city = flightTo[1].replace(/\s*\(.*\)\s*$/, "").trim();
+    city = AIRPORT_CITIES[city.toUpperCase()] || city;
+    mode = "flight";
+  }
 
   // "Train to [City]"
   if (!city) {
     const trainTo = title.match(/(?:amtrak|train)\s+to\s+(.+)/i);
-    if (trainTo) { city = trainTo[1].replace(/\s*\(.*\)\s*$/, "").trim(); mode = "train"; }
+    if (trainTo) {
+      city = trainTo[1].replace(/\s*\(.*\)\s*$/, "").trim();
+      city = AIRPORT_CITIES[city.toUpperCase()] || city;
+      mode = "train";
+    }
   }
 
   // "ABC → DEF" airport codes (non-Flighty, no description)
@@ -465,13 +539,17 @@ function mergeLegsIntoTrips(legs, homeCity) {
       legOrigin = leg.originCity;
       legDest = leg.city;
     } else if (leg._legType === "amtrak") {
-      // Amtrak city = station address = departure point
-      // If departing from home → going somewhere (we don't know dest yet from this leg alone)
-      // If departing from non-home → returning home
-      if (isHomeCity(leg.city, homeVariants)) {
+      if (leg.originCity) {
+        // Apple Wallet train: we resolved both origin and destination from the title —
+        // treat exactly like a Flighty leg (city = dest, originCity = departure).
+        legOrigin = leg.originCity;
+        legDest = leg.city;
+      } else if (isHomeCity(leg.city, homeVariants)) {
+        // Amtrak app: city = departure address = home → outbound, destination unknown
         legOrigin = "home";
-        legDest = null; // Unknown until we see the next leg
+        legDest = null;
       } else {
+        // Amtrak app: city = departure address = non-home → returning home
         legOrigin = leg.city;
         legDest = "home";
       }
@@ -516,17 +594,23 @@ function mergeLegsIntoTrips(legs, homeCity) {
 
     } else if (originIsHome && !legDest) {
       // ── LEAVING HOME, destination unknown (Amtrak outbound) ──
-      // Remember the departure date; the destination will come from the next non-home leg
-      if (currentTrip) {
-        result.push({ ...currentTrip });
+      // Remember the departure date; the destination will come from the next non-home leg.
+      // Skip if a more-informative leg for the same departure already opened a trip
+      // (e.g. Apple Wallet and Amtrak app both fire for the same train on the same date).
+      if (currentTrip && currentTrip.city && currentTrip._fromHome && leg.start === currentTrip.start) {
+        // Duplicate outbound — the trip is already open with a known destination; skip.
+      } else {
+        if (currentTrip) {
+          result.push({ ...currentTrip });
+        }
+        currentTrip = {
+          city: null, // Will be filled by next leg
+          start: leg.start,
+          end: leg.end,
+          mode: leg.mode,
+          _pendingDeparture: true,
+        };
       }
-      currentTrip = {
-        city: null, // Will be filled by next leg
-        start: leg.start,
-        end: leg.end,
-        mode: leg.mode,
-        _pendingDeparture: true,
-      };
 
     } else if (!originIsHome && destIsHome) {
       // ── RETURNING HOME ──

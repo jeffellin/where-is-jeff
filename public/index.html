@@ -404,18 +404,6 @@
     }
 
     /* ── Intro Animation ── */
-    @keyframes scanSweep {
-      0%   { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    @keyframes ringPulse {
-      0%   { transform: translate(-50%,-50%) scale(0.6); opacity: 0.8; }
-      100% { transform: translate(-50%,-50%) scale(1.6); opacity: 0; }
-    }
-    @keyframes reticleIn {
-      0%   { opacity: 0; transform: scale(1.4); }
-      100% { opacity: 1; transform: scale(1); }
-    }
     @keyframes blink {
       0%, 100% { opacity: 1; }
       50% { opacity: 0; }
@@ -424,30 +412,9 @@
       0%   { opacity: 1; }
       100% { opacity: 0; pointer-events: none; }
     }
-    @keyframes cornerSlide {
-      from { opacity: 0; transform: scale(0); }
-      to   { opacity: 1; transform: scale(1); }
-    }
-    @keyframes typeIn {
-      from { width: 0; }
-      to   { width: 100%; }
-    }
-    @keyframes lockOn {
-      0%   { stroke-dashoffset: 200; opacity: 0; }
-      40%  { opacity: 1; }
-      100% { stroke-dashoffset: 0; opacity: 1; }
-    }
-    @keyframes targetShake {
-      0%, 100% { transform: translate(-50%,-50%) rotate(0deg); }
-      20%  { transform: translate(-52%,-50%) rotate(-1deg); }
-      40%  { transform: translate(-48%,-52%) rotate(1deg); }
-      60%  { transform: translate(-51%,-48%) rotate(-0.5deg); }
-      80%  { transform: translate(-49%,-51%) rotate(0.5deg); }
-    }
-    @keyframes targetLocked {
-      0%   { stroke: var(--accent); }
-      50%  { stroke: #fff; }
-      100% { stroke: var(--accent); }
+    @keyframes scanlineScroll {
+      0%   { transform: translateY(-100%); }
+      100% { transform: translateY(100vh); }
     }
 
     #intro-overlay {
@@ -459,86 +426,91 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 0;
+      overflow: hidden;
     }
     #intro-overlay.fade-out {
       animation: introFadeOut 0.3s ease-out forwards;
     }
 
-    .intro-reticle {
-      position: relative;
-      width: 200px;
-      height: 200px;
-      animation: reticleIn 0.25s ease-out;
-    }
-
-    /* corner brackets */
-    .intro-reticle .corner {
+    /* subtle scanline effect */
+    #intro-overlay::after {
+      content: '';
       position: absolute;
-      width: 24px;
-      height: 24px;
-      border-color: var(--accent);
-      border-style: solid;
-      opacity: 0;
-    }
-    .intro-reticle .corner-tl { top: 0; left: 0; border-width: 2px 0 0 2px; animation: cornerSlide 0.15s ease-out 0.15s forwards; transform-origin: top left; }
-    .intro-reticle .corner-tr { top: 0; right: 0; border-width: 2px 2px 0 0; animation: cornerSlide 0.15s ease-out 0.2s forwards; transform-origin: top right; }
-    .intro-reticle .corner-bl { bottom: 0; left: 0; border-width: 0 0 2px 2px; animation: cornerSlide 0.15s ease-out 0.25s forwards; transform-origin: bottom left; }
-    .intro-reticle .corner-br { bottom: 0; right: 0; border-width: 0 2px 2px 0; animation: cornerSlide 0.15s ease-out 0.3s forwards; transform-origin: bottom right; }
-
-    .intro-reticle svg {
-      width: 100%;
-      height: 100%;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 3px,
+        rgba(0,0,0,0.08) 3px,
+        rgba(0,0,0,0.08) 4px
+      );
+      pointer-events: none;
     }
 
-    /* scan ring */
-    .scan-ring {
-      position: absolute;
-      top: 50%; left: 50%;
-      width: 170px; height: 170px;
-      border-radius: 50%;
-      border: 1.5px solid rgba(232,121,82,0.2);
-      transform: translate(-50%,-50%);
-    }
-    .scan-sweep {
-      position: absolute;
-      top: 50%; left: 50%;
-      width: 170px; height: 170px;
-      transform-origin: center;
-      transform: translate(-50%,-50%);
-      animation: scanSweep 0.9s linear 0.1s 2;
-    }
-
-    /* ring ripple */
-    .ring-ripple {
-      position: absolute;
-      top: 50%; left: 50%;
-      width: 170px; height: 170px;
-      border-radius: 50%;
-      border: 1px solid rgba(232,121,82,0.5);
-      animation: ringPulse 0.75s ease-out infinite;
-    }
-    .ring-ripple:nth-child(2) { animation-delay: 0.25s; }
-    .ring-ripple:nth-child(3) { animation-delay: 0.5s; }
-
-    /* crosshairs */
-    .crosshair-h, .crosshair-v {
-      position: absolute;
-      top: 50%; left: 50%;
-      background: rgba(232,121,82,0.25);
-    }
-    .crosshair-h { width: 170px; height: 1px; transform: translate(-50%,-50%); }
-    .crosshair-v { width: 1px; height: 170px; transform: translate(-50%,-50%); }
-
-    .intro-log {
-      margin-top: 32px;
-      width: 280px;
-      font-family: var(--mono);
-      font-size: 11px;
-      letter-spacing: 0.08em;
+    .intro-terminal {
+      width: 300px;
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 0;
+    }
+
+    .terminal-header {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      color: rgba(232,121,82,0.5);
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    .progress-label {
+      font-family: var(--mono);
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      color: var(--accent);
+      margin-bottom: 10px;
+      text-transform: uppercase;
+    }
+
+    /* progress bar track */
+    .progress-track {
+      width: 100%;
+      height: 3px;
+      background: rgba(232,121,82,0.12);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 8px;
+      position: relative;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      border-radius: 2px;
+      transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 0 8px rgba(232,121,82,0.6);
+    }
+
+    .progress-meta {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: rgba(232,121,82,0.4);
+      margin-bottom: 28px;
+    }
+    .progress-pct {
+      color: rgba(232,121,82,0.7);
+    }
+
+    .intro-log {
+      width: 100%;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
     }
 
     .log-line {
@@ -549,10 +521,10 @@
       transition: opacity 0.2s;
     }
     .log-line.visible { opacity: 1; }
-    .log-line .prefix { color: rgba(232,121,82,0.6); flex-shrink: 0; }
-    .log-line .text { color: rgba(255,255,255,0.5); }
-    .log-line .text.highlight { color: var(--accent); font-weight: 500; }
-    .log-line .text.success { color: var(--green); font-weight: 500; }
+    .log-line .prefix { color: rgba(232,121,82,0.5); flex-shrink: 0; }
+    .log-line .text { color: rgba(255,255,255,0.4); }
+    .log-line .text.highlight { color: var(--accent); }
+    .log-line .text.success { color: var(--green); }
 
     .intro-cursor {
       display: inline-block;
@@ -584,53 +556,19 @@
   </style>
 </head>
 <body>
-  <!-- Intro tracking animation -->
+  <!-- Intro loading screen -->
   <div id="intro-overlay">
-    <div class="intro-reticle">
-      <!-- ripple rings -->
-      <div class="ring-ripple"></div>
-      <div class="ring-ripple"></div>
-      <div class="ring-ripple"></div>
-      <!-- static ring -->
-      <div class="scan-ring"></div>
-      <!-- crosshairs -->
-      <div class="crosshair-h"></div>
-      <div class="crosshair-v"></div>
-      <!-- corner brackets -->
-      <div class="corner corner-tl"></div>
-      <div class="corner corner-tr"></div>
-      <div class="corner corner-bl"></div>
-      <div class="corner corner-br"></div>
-      <!-- sweep arm -->
-      <div class="scan-sweep">
-        <svg viewBox="0 0 170 170" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <radialGradient id="sweepGrad" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stop-color="rgba(232,121,82,0)" />
-              <stop offset="100%" stop-color="rgba(232,121,82,0)" />
-            </radialGradient>
-          </defs>
-          <!-- sweep wedge -->
-          <path d="M85,85 L85,0 A85,85 0 0,1 145,145 Z"
-                fill="url(#sweepFade)" opacity="0.15"/>
-          <line x1="85" y1="85" x2="85" y2="3"
-                stroke="rgba(232,121,82,0.8)" stroke-width="1.5"/>
-        </svg>
+    <div class="intro-terminal">
+      <div class="terminal-header">SYS://LOCATE &nbsp;v2.1</div>
+      <div class="progress-label">Locating Jeff<span class="intro-cursor"></span></div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill"></div>
       </div>
-      <!-- lock-on circle (appears later via JS) -->
-      <svg id="lock-svg" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;" viewBox="0 0 200 200">
-        <circle cx="100" cy="100" r="60"
-          fill="none" stroke="var(--accent)" stroke-width="2"
-          stroke-dasharray="377" stroke-dashoffset="377"
-          id="lock-circle"/>
-      </svg>
-    </div>
-
-    <div class="intro-log" id="intro-log">
-      <div class="log-line" id="ll-0">
-        <span class="prefix">›</span>
-        <span class="text">Initializing location tracker<span class="intro-cursor"></span></span>
+      <div class="progress-meta">
+        <span id="progress-status">INIT</span>
+        <span class="progress-pct" id="progress-pct">0%</span>
       </div>
+      <div class="intro-log" id="intro-log"></div>
     </div>
   </div>
 
@@ -655,10 +593,17 @@
     const introReady = new Promise(resolve => { introResolveFn = resolve; });
 
     (function runIntro() {
-      const overlay  = document.getElementById("intro-overlay");
-      const log      = document.getElementById("intro-log");
-      const lockSvg  = document.getElementById("lock-svg");
-      const lockCirc = document.getElementById("lock-circle");
+      const overlay = document.getElementById("intro-overlay");
+      const log     = document.getElementById("intro-log");
+      const fill    = document.getElementById("progress-fill");
+      const pct     = document.getElementById("progress-pct");
+      const status  = document.getElementById("progress-status");
+
+      function setProgress(p, label) {
+        fill.style.width = p + "%";
+        pct.textContent = p + "%";
+        if (label) status.textContent = label;
+      }
 
       function addLine(prefix, text, cls, delay) {
         return new Promise(res => {
@@ -673,34 +618,31 @@
         });
       }
 
-      // sequence
-      setTimeout(() => {
-        document.getElementById("ll-0").classList.add("visible");
-      }, 50);
+      // Step through progress stages in sync with the log lines
+      setProgress(0, "INIT");
 
-      Promise.resolve()
-        .then(() => addLine("›", "Scanning network nodes…", "", 450))
-        .then(() => addLine("›", "Triangulating signal…", "", 850))
-        .then(() => {
-          return new Promise(res => {
-            setTimeout(() => {
-              lockSvg.style.opacity = "1";
-              lockCirc.style.transition = "stroke-dashoffset 0.35s ease-out";
-              lockCirc.style.strokeDashoffset = "0";
-              lockCirc.style.stroke = "var(--accent)";
-              res();
-            }, 1200);
-          });
-        })
-        .then(() => addLine("●", "TARGET ACQUIRED", "success", 1450))
-        .then(() => addLine("›", "Loading details…", "highlight", 1700))
-        .then(() => {
-          setTimeout(() => introResolveFn(), 1850);
-          introReady.then(() => {
-            overlay.classList.add("fade-out");
-            setTimeout(() => overlay.remove(), 350);
-          });
+      setTimeout(() => setProgress(20, "SCANNING"), 100);
+      setTimeout(() => addLine("›", "Scanning network nodes…", "", 200));
+
+      setTimeout(() => setProgress(50, "TRIANGULATING"), 550);
+      setTimeout(() => addLine("›", "Triangulating signal…", "", 600));
+
+      setTimeout(() => setProgress(80, "LOCKING"), 950);
+
+      setTimeout(() => {
+        setProgress(100, "LOCKED");
+        addLine("●", "TARGET ACQUIRED", "success", 0);
+      }, 1250);
+
+      setTimeout(() => addLine("›", "Loading details…", "highlight", 0), 1450);
+
+      setTimeout(() => {
+        introResolveFn();
+        introReady.then(() => {
+          overlay.classList.add("fade-out");
+          setTimeout(() => overlay.remove(), 350);
         });
+      }, 3800);
     })();
 
     // ── Configuration ──
@@ -769,9 +711,13 @@
 
       const trainFrom = leg.fromStation || leg.from;
       const trainTo   = leg.toStation   || leg.to;
+      const flightFrom = leg.fromCode || leg.from;
+      const flightTo   = leg.toCode   || leg.to;
       const route = isTrain || isDrive
         ? (trainTo ? `${trainFrom} → ${trainTo}` : trainFrom)
-        : `${leg.fromCode || leg.from || "?"} → ${leg.toCode || leg.to || "?"}`;
+        : flightFrom
+          ? `${flightFrom} → ${flightTo || "?"}`
+          : flightTo || "?";
 
       const depDateStr  = leg.departureDate ? formatDate(leg.departureDate) : null;
       const arrDateStr  = leg.arrivalDate   ? formatDate(leg.arrivalDate)   : null;
@@ -793,8 +739,8 @@
 
       const tags = [
         leg.flightNumber  ? `<span class="modal-leg__tag">${leg.flightNumber}</span>`   : "",
-        leg.bookingCode   ? `<span class="modal-leg__tag">Code: ${leg.bookingCode}</span>` : "",
-        leg.reservation   ? `<span class="modal-leg__tag">Res: ${leg.reservation}</span>`  : "",
+        "",
+        "",
         leg.seat          ? `<span class="modal-leg__tag">Seat: ${leg.seat}</span>`        : "",
         leg.duration      ? `<span class="modal-leg__tag">${leg.duration}</span>`          : "",
       ].join("");
