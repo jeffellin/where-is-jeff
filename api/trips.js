@@ -238,6 +238,15 @@ function parseEvent(event) {
   let originCity = null;
   let mode = "flight";
 
+  // ── Work trip markers ──
+  // All-day events like "Work Trip MSP" or "Work Trip Minneapolis"
+  const workMatch = title.match(/^work\s+trip\s+(?:to\s+)?(.+)/i);
+  if (workMatch) {
+    const cityRaw = workMatch[1].trim();
+    const city = AIRPORT_CITIES[cityRaw.toUpperCase()] || cityRaw;
+    return { _workMarker: true, city, start, end };
+  }
+
   // ── Flighty events ──
   // Title format: "✈ DCA→LAX • AA 3283" (after stripping zero-width chars)
   // Match any 3-letter airport code pair separated by arrow-like characters
@@ -858,7 +867,9 @@ async function handler(req, res) {
     }
 
     // Parse all events into legs, then merge into trips
-    const legs = events.map(parseEvent).filter(Boolean);
+    const allParsed = events.map(parseEvent).filter(Boolean);
+    const workMarkers = allParsed.filter(l => l._workMarker);
+    const legs = allParsed.filter(l => !l._workMarker);
 
     // Collect display-worthy legs for trip popups, merging duplicates
     const rawDisplayLegs = legs
@@ -867,21 +878,39 @@ async function handler(req, res) {
         start, end, mode, city, originCity, ..._detail,
       }));
 
-    // Merge legs with the same date + mode + carrier (+ route for flights).
-    // Trains use only date+mode+carrier so Amtrak app and Apple Wallet events for the same
+    // Merge legs with the same date + mode + flight-number-digits + destination.
+    // Using only the numeric part of the flight number means "Delta 2895" and "DL 2895"
+    // (Flighty vs auto-created Gmail event for the same flight) resolve to the same key.
+    // Trains use only date+mode so Amtrak app and Apple Wallet events for the same
     // ride merge correctly — they use different identifiers (train number vs station names).
-    // Flights include the route so same-day connecting legs with the same carrier stay distinct.
     const legGroups = new Map();
     for (const leg of rawDisplayLegs) {
-      const route = leg.mode === "train" ? "" : (leg.flightNumber
-        ? leg.flightNumber.toLowerCase().replace(/\s+/g, "")
-        : `${(leg.fromCode || leg.from || "").toLowerCase()}-${(leg.toCode || leg.to || "").toLowerCase()}`);
-      const key = `${leg.start}|${leg.mode}|${(leg.carrier || "").toLowerCase()}|${route}`;
+      // Normalize flight number to digits-only (strips "Delta"/"DL"/"AA" prefix variants)
+      const flightDigits = leg.flightNumber
+        ? leg.flightNumber.replace(/\s+/g, "").replace(/^[A-Za-z]+(\d+)$/, "$1")
+        : "";
+      // Resolve destination to city name so "MSP" and "Minneapolis" hash the same
+      const destRaw = leg.toCode || leg.to || leg.city || "";
+      const dest = (AIRPORT_CITIES[destRaw.toUpperCase()] || destRaw).toLowerCase();
+      // Trains: key on date + departure time only — Apple Wallet and Amtrak app events
+      // for the same train have opposite city orientations (dest vs origin) so dest-based
+      // keys won't match. Departure time is the reliable shared field.
+      // Flights: key on date + normalized flight number + resolved destination city.
+      const key = leg.mode === "train"
+        ? `${leg.start}|train|${leg.departure || ""}`
+        : `${leg.start}|flight|${flightDigits || dest}|${dest}`;
       if (legGroups.has(key)) {
         const existing = legGroups.get(key);
-        for (const [k, v] of Object.entries(leg)) {
-          if (v != null && existing[k] == null) existing[k] = v;
+        // Merge: Flighty legs are more authoritative — prefer whichever has more detail
+        // (measured by non-null field count) and fill any remaining gaps from the other.
+        const existingScore = Object.values(existing).filter(v => v != null).length;
+        const newScore      = Object.values(leg).filter(v => v != null).length;
+        const [primary, secondary] = newScore > existingScore ? [leg, existing] : [existing, leg];
+        const merged = { ...primary };
+        for (const [k, v] of Object.entries(secondary)) {
+          if (v != null && merged[k] == null) merged[k] = v;
         }
+        legGroups.set(key, merged);
       } else {
         legGroups.set(key, { ...leg });
       }
@@ -894,7 +923,12 @@ async function handler(req, res) {
     const homeVariants = buildHomeCityVariants(homeCity);
     trips = trips.filter(t => t.city && !isHomeCity(t.city, homeVariants)).map((trip) => {
       const coords = getCoords(trip.city);
-      return { ...trip, lat: coords?.lat || null, lng: coords?.lng || null };
+      // Tag as work trip if a "Work Trip [City]" all-day event overlaps this trip's dates
+      const isWork = workMarkers.some(w =>
+        w.city.toLowerCase() === trip.city.toLowerCase() &&
+        w.start <= trip.end && w.end >= trip.start
+      );
+      return { ...trip, lat: coords?.lat || null, lng: coords?.lng || null, ...(isWork && { work: true }) };
     });
 
     const home = {
