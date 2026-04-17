@@ -70,7 +70,7 @@
     /* ── Header ── */
     .header { margin-bottom: 36px; }
     .header__label {
-      font-size: 11px;
+      font-size: 12px;
       font-family: var(--mono);
       color: rgba(255,255,255,0.45);
       letter-spacing: 0.15em;
@@ -78,7 +78,7 @@
       margin-bottom: 8px;
     }
     .header__title {
-      font-size: 36px;
+      font-size: 40px;
       font-family: var(--serif);
       font-weight: 700;
       line-height: 1.1;
@@ -170,7 +170,7 @@
     .live__dot--home { background: var(--green); box-shadow: 0 0 12px var(--green-glow); }
     .live__dot--away { background: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
     .live__label {
-      font-size: 11px;
+      font-size: 12px;
       font-family: var(--mono);
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -187,13 +187,13 @@
     }
     .city-row svg { color: var(--text-dim); flex-shrink: 0; position: relative; top: 2px; }
     .city-name {
-      font-size: 28px;
+      font-size: 32px;
       font-family: var(--serif);
       font-weight: 700;
       color: #fff;
     }
     .city-region {
-      font-size: 14px;
+      font-size: 15px;
       color: var(--text-dim);
       margin-bottom: 16px;
       padding-left: 22px;
@@ -204,7 +204,7 @@
       background: rgba(255,255,255,0.04);
       border-radius: 10px;
       padding: 12px 16px;
-      font-size: 14px;
+      font-size: 15px;
       line-height: 1.6;
       color: rgba(255,255,255,0.65);
     }
@@ -213,7 +213,7 @@
 
     /* ── Upcoming Trips ── */
     .upcoming-label {
-      font-size: 11px;
+      font-size: 12px;
       font-family: var(--mono);
       color: rgba(255,255,255,0.45);
       letter-spacing: 0.12em;
@@ -247,7 +247,7 @@
     .trip-row__icon--flight { background: rgba(232,121,82,0.15); color: var(--accent); }
     .trip-row__icon--train { background: rgba(96,165,250,0.15); color: var(--blue); }
     .trip-row__icon--drive { background: rgba(74,222,128,0.15); color: var(--green); }
-    .trip-row__city { font-size: 15px; font-weight: 500; color: #fff; display: flex; align-items: center; gap: 8px; }
+    .trip-row__city { font-size: 16px; font-weight: 500; color: #fff; display: flex; align-items: center; gap: 8px; }
     .work-badge {
       font-size: 9px;
       font-family: var(--mono);
@@ -261,13 +261,31 @@
       padding: 2px 6px;
       flex-shrink: 0;
     }
-    .trip-row__dates { font-size: 12px; color: rgba(255,255,255,0.55); margin-top: 2px; }
+    .trip-row__dates { font-size: 13px; color: rgba(255,255,255,0.55); margin-top: 2px; }
     .trip-row__countdown {
-      font-size: 11px;
+      font-size: 12px;
       font-family: var(--mono);
       color: rgba(255,255,255,0.45);
       white-space: nowrap;
     }
+
+    /* ── Show All Button ── */
+    .show-all-btn {
+      display: block;
+      width: 100%;
+      margin-top: 10px;
+      padding: 10px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      color: rgba(255,255,255,0.45);
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .show-all-btn:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.7); }
 
     /* ── Footer ── */
     .footer {
@@ -279,7 +297,7 @@
       justify-content: space-between;
     }
     .footer__text {
-      font-size: 11px;
+      font-size: 12px;
       font-family: var(--mono);
       color: rgba(255,255,255,0.3);
     }
@@ -325,12 +343,12 @@
     }
     .modal-title {
       font-family: var(--serif);
-      font-size: 22px;
+      font-size: 24px;
       font-weight: 700;
       color: #fff;
     }
     .modal-dates {
-      font-size: 12px;
+      font-size: 13px;
       font-family: var(--mono);
       color: var(--text-dim);
       margin-top: 2px;
@@ -380,13 +398,13 @@
     .modal-leg__icon--train  { background: rgba(96,165,250,0.15); color: var(--blue); }
     .modal-leg__body { flex: 1; min-width: 0; }
     .modal-leg__route {
-      font-size: 15px;
+      font-size: 16px;
       font-weight: 600;
       color: #fff;
       margin-bottom: 3px;
     }
     .modal-leg__number {
-      font-size: 12px;
+      font-size: 13px;
       font-family: var(--mono);
       color: var(--text-dim);
       margin-bottom: 6px;
@@ -397,7 +415,7 @@
       margin-bottom: 4px;
     }
     .modal-leg__time {
-      font-size: 12px;
+      font-size: 13px;
       color: rgba(255,255,255,0.6);
     }
     .modal-leg__time span { color: var(--text-dim); font-size: 11px; }
@@ -607,6 +625,12 @@
 
     (function runIntro() {
       const overlay = document.getElementById("intro-overlay");
+
+      if (new URLSearchParams(window.location.search).get("skipIntro") === "1") {
+        overlay.remove();
+        introResolveFn();
+        return;
+      }
       const log     = document.getElementById("intro-log");
       const fill    = document.getElementById("progress-fill");
       const pct     = document.getElementById("progress-pct");
@@ -662,7 +686,6 @@
     const API_URL = "/api/trips";
     const REFRESH_INTERVAL = 15 * 60 * 1000; // 15 minutes
 
-    let allLegs = [];
 
     // ── SVG Icons ──
     const ICONS = {
@@ -712,10 +735,6 @@
     }
 
     // ── Modal ──
-    function legsForTrip(trip) {
-      return allLegs.filter(l => l.start >= trip.start && l.start <= trip.end);
-    }
-
     function renderLegDetail(leg) {
       const isTrain = leg.type === "train";
       const isDrive = leg.type === "drive";
@@ -771,7 +790,7 @@
     }
 
     function openModal(trip) {
-      const legs = legsForTrip(trip);
+      const legs = trip.legs || [];
       const legsHtml = legs.length
         ? legs.map(renderLegDetail).join("")
         : `<div style="color:rgba(255,255,255,0.4);font-size:13px;padding:8px 0;">No itinerary details available for this trip.</div>`;
@@ -827,10 +846,12 @@
       const currentLng = isHome ? home.lng : (status.trip?.lng || home.lng);
 
       const now = new Date();
-      const upcoming = trips
+      const allUpcoming = trips
         .filter(t => new Date(t.start + "T00:00:00") > now)
-        .sort((a, b) => new Date(a.start) - new Date(b.start))
-        .slice(0, 8);
+        .sort((a, b) => new Date(a.start) - new Date(b.start));
+      const fullView = new URLSearchParams(window.location.search).get("full") === "1";
+      const TRIP_LIMIT = 8;
+      const upcoming = fullView ? allUpcoming : allUpcoming.slice(0, TRIP_LIMIT);
 
       // Status message — use non-breaking space in city names to prevent line breaks
       const nbsp = (str) => str.replace(/\s/g, '\u00A0');
@@ -846,8 +867,8 @@
       // Upcoming rows
       let upcomingHtml = "";
       if (upcoming.length > 0) {
-        window.__upcomingTrips = upcoming;
-        const rows = upcoming.map((trip, i) => {
+        window.__upcomingTrips = allUpcoming;
+        const renderRows = (trips) => trips.map((trip, i) => {
           const days = daysUntil(trip.start);
           return `
             <div class="trip-row" style="animation: slideIn 0.5s ease-out ${0.1 + i*0.1}s both;" data-trip-idx="${i}">
@@ -862,9 +883,22 @@
             </div>`;
         }).join("");
 
+        const hasMore = !fullView && allUpcoming.length > TRIP_LIMIT;
+        const showAllBtn = hasMore
+          ? `<button class="show-all-btn" id="show-all-btn">Show all ${allUpcoming.length} trips</button>`
+          : "";
+
         upcomingHtml = `
           <div class="upcoming-label">Upcoming</div>
-          <div class="upcoming-list">${rows}</div>`;
+          <div class="upcoming-list" id="upcoming-list">${renderRows(upcoming)}</div>
+          ${showAllBtn}`;
+
+        window.__renderAllTrips = () => {
+          document.getElementById("upcoming-list").innerHTML = renderRows(allUpcoming);
+          const btn = document.getElementById("show-all-btn");
+          if (btn) btn.remove();
+          attachTripHandlers();
+        };
       }
 
       document.getElementById("app").innerHTML = `
@@ -897,12 +931,18 @@
         </div>`;
 
       // Attach trip row click handlers after rendering
-      document.querySelectorAll(".trip-row[data-trip-idx]").forEach(row => {
-        row.addEventListener("click", () => {
-          const idx = parseInt(row.dataset.tripIdx);
-          openModal(window.__upcomingTrips[idx]);
+      function attachTripHandlers() {
+        document.querySelectorAll(".trip-row[data-trip-idx]").forEach(row => {
+          row.addEventListener("click", () => {
+            const idx = parseInt(row.dataset.tripIdx);
+            openModal(window.__upcomingTrips[idx]);
+          });
         });
-      });
+      }
+      attachTripHandlers();
+
+      const showAllBtn = document.getElementById("show-all-btn");
+      if (showAllBtn) showAllBtn.addEventListener("click", window.__renderAllTrips);
     }
 
     function renderError(err) {
@@ -924,7 +964,6 @@
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (!data.ok) throw new Error(data.detail || "API error");
-        allLegs = data.legs || [];
         // Wait for intro animation before revealing content
         await introReady;
         render(data);

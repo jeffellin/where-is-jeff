@@ -276,7 +276,7 @@ function parseEvent(event) {
     const carrierLineMatch = description.match(/^([A-Za-z][A-Za-z ]+?)\s+(\d+)\s*$/m);
     const depMatch = description.match(/↗\s*(.+)/);
     const arrMatch = description.match(/↘\s*(.+)/);
-    const bookingMatch = description.match(/Booking Code:\s*(\S+)/);
+
     const durationMatch = description.match(/Flight time\s+(.+)/);
 
     return {
@@ -299,7 +299,6 @@ function parseEvent(event) {
         arrivalDate: end,
         departure: depMatch ? depMatch[1].trim() : null,
         arrival: arrMatch ? arrMatch[1].trim() : null,
-        bookingCode: bookingMatch ? bookingMatch[1] : null,
         duration: durationMatch ? durationMatch[1].trim() : null,
       },
     };
@@ -313,7 +312,7 @@ function parseEvent(event) {
     mode = "train";
     if (city) {
       const trainName = title.replace(/^amtrak:\s*/i, "").trim();
-      const reservationMatch = description.match(/reservation num\w*(?:\s*:\s*|\s+is\s+)(\w+)/i);
+
       return {
         id: event.id,
         city,
@@ -331,7 +330,6 @@ function parseEvent(event) {
           departureDate: start,
           departure: formatDetailTime(event.start?.dateTime, event.start?.timeZone),
           arrival: formatDetailTime(event.end?.dateTime, event.end?.timeZone),
-          reservation: reservationMatch ? reservationMatch[1] : null,
         },
       };
     }
@@ -345,7 +343,6 @@ function parseEvent(event) {
     const departureCity = extractCityFromStationLocation(location);
     mode = "train";
     if (departureCity) {
-      const reservationMatch = description.match(/Reservation Number:\s*(\S+)/i);
       const seatMatch = description.match(/Seats?:\s*(.+)/i);
       const stationMatch = title.match(/from\s+(.+?)\s+to\s+(.+)/i);
       const fromStation = stationMatch ? stationMatch[1].trim() : null;
@@ -376,7 +373,6 @@ function parseEvent(event) {
           to: destCity || null,
           departureDate: start,
           departure: formatDetailTime(event.start?.dateTime, event.start?.timeZone),
-          reservation: reservationMatch ? reservationMatch[1] : null,
           seat: seatMatch ? seatMatch[1].trim() : null,
         },
       };
@@ -664,6 +660,7 @@ function mergeLegsIntoTrips(legs, homeCity) {
         start: leg.start,
         end: leg.end,
         mode: leg.mode,
+        _fromHome: true,
       };
 
     } else if (!destIsHome && legDest && currentTrip && currentTrip._pendingDeparture) {
@@ -822,6 +819,97 @@ function deduplicateTrips(trips) {
   return result;
 }
 
+// ── Core data fetch (shared by all endpoints) ──
+async function fetchData() {
+  const auth = new google.auth.GoogleAuth({
+    credentials: {
+      client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+    },
+    scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
+  });
+
+  const calendar = google.calendar({ version: "v3", auth });
+
+  const now = new Date();
+  const timeMin = new Date(now); timeMin.setDate(timeMin.getDate() - 30);
+  const timeMax = new Date(now); timeMax.setDate(timeMax.getDate() + 365);
+
+  const response = await calendar.events.list({
+    calendarId: process.env.GOOGLE_CALENDAR_ID,
+    timeMin: timeMin.toISOString(),
+    timeMax: timeMax.toISOString(),
+    singleEvents: true,
+    orderBy: "startTime",
+  });
+
+  const events = response.data.items || [];
+  const homeCity = process.env.HOME_CITY || "Arlington";
+
+  const allParsed = events.map(parseEvent).filter(Boolean);
+  const workMarkers = allParsed.filter(l => l._workMarker);
+  const legs = allParsed.filter(l => !l._workMarker);
+
+  const rawDisplayLegs = legs
+    .filter(l => l._detail)
+    .map(({ start, end, mode, city, originCity, _detail }) => ({
+      start, end, mode, city, originCity, ..._detail,
+    }));
+
+  const legGroups = new Map();
+  for (const leg of rawDisplayLegs) {
+    const flightDigits = leg.flightNumber
+      ? leg.flightNumber.replace(/\s+/g, "").replace(/^[A-Za-z]+(\d+)$/, "$1")
+      : "";
+    const destRaw = leg.toCode || leg.to || leg.city || "";
+    const dest = (AIRPORT_CITIES[destRaw.toUpperCase()] || destRaw).toLowerCase();
+    const key = leg.mode === "train"
+      ? `${leg.start}|train|${leg.departure || ""}`
+      : `${leg.start}|flight|${flightDigits || dest}|${dest}`;
+    if (legGroups.has(key)) {
+      const existing = legGroups.get(key);
+      const existingScore = Object.values(existing).filter(v => v != null).length;
+      const newScore      = Object.values(leg).filter(v => v != null).length;
+      const [primary, secondary] = newScore > existingScore ? [leg, existing] : [existing, leg];
+      const merged = { ...primary };
+      for (const [k, v] of Object.entries(secondary)) {
+        if (v != null && merged[k] == null) merged[k] = v;
+      }
+      legGroups.set(key, merged);
+    } else {
+      legGroups.set(key, { ...leg });
+    }
+  }
+  const displayLegs = [...legGroups.values()];
+
+  let trips = deduplicateTrips(mergeLegsIntoTrips(legs, homeCity));
+
+  const homeVariants = buildHomeCityVariants(homeCity);
+  trips = trips.filter(t => t.city && !isHomeCity(t.city, homeVariants)).map((trip) => {
+    const coords = getCoords(trip.city);
+    const isWork = workMarkers.some(w =>
+      w.city.toLowerCase() === trip.city.toLowerCase() &&
+      w.start <= trip.end && w.end >= trip.start
+    );
+    return { ...trip, lat: coords?.lat || null, lng: coords?.lng || null, ...(isWork && { work: true }) };
+  });
+
+  const home = {
+    city: homeCity,
+    region: process.env.HOME_REGION || "VA",
+    lat: parseFloat(process.env.HOME_LAT) || 38.8816,
+    lng: parseFloat(process.env.HOME_LNG) || -77.091,
+  };
+
+  // Nest legs under their parent trip
+  const tripsWithLegs = trips.map(trip => ({
+    ...trip,
+    legs: displayLegs.filter(l => l.start >= trip.start && l.start <= trip.end),
+  }));
+
+  return { home, trips: tripsWithLegs, events, fetched_at: new Date().toISOString() };
+}
+
 // ── Main handler ──
 async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -829,116 +917,21 @@ async function handler(req, res) {
   res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
 
   try {
-    const auth = new google.auth.GoogleAuth({
-      credentials: {
-        client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-      },
-      scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
-    });
-
-    const calendar = google.calendar({ version: "v3", auth });
-
-    const now = new Date();
-    const timeMin = new Date(now); timeMin.setDate(timeMin.getDate() - 30);
-    const timeMax = new Date(now); timeMax.setDate(timeMax.getDate() + 365);
-
-    const response = await calendar.events.list({
-      calendarId: process.env.GOOGLE_CALENDAR_ID,
-      timeMin: timeMin.toISOString(),
-      timeMax: timeMax.toISOString(),
-      singleEvents: true,
-      orderBy: "startTime",
-    });
-
-    const events = response.data.items || [];
-    const homeCity = process.env.HOME_CITY || "Arlington";
+    const data = await fetchData();
 
     // Debug mode: /api/trips?debug=1 shows raw events
     if (req.query && req.query.debug === "1") {
-      const raw = events.map(e => ({
+      const raw = data.events.map(e => ({
         summary: e.summary,
         location: e.location,
         description: e.description ? e.description.substring(0, 200) : null,
         start: e.start,
         end: e.end,
       }));
-      return res.status(200).json({ ok: true, debug: true, event_count: events.length, events: raw });
+      return res.status(200).json({ ok: true, debug: true, event_count: raw.length, events: raw });
     }
 
-    // Parse all events into legs, then merge into trips
-    const allParsed = events.map(parseEvent).filter(Boolean);
-    const workMarkers = allParsed.filter(l => l._workMarker);
-    const legs = allParsed.filter(l => !l._workMarker);
-
-    // Collect display-worthy legs for trip popups, merging duplicates
-    const rawDisplayLegs = legs
-      .filter(l => l._detail)
-      .map(({ start, end, mode, city, originCity, _detail }) => ({
-        start, end, mode, city, originCity, ..._detail,
-      }));
-
-    // Merge legs with the same date + mode + flight-number-digits + destination.
-    // Using only the numeric part of the flight number means "Delta 2895" and "DL 2895"
-    // (Flighty vs auto-created Gmail event for the same flight) resolve to the same key.
-    // Trains use only date+mode so Amtrak app and Apple Wallet events for the same
-    // ride merge correctly — they use different identifiers (train number vs station names).
-    const legGroups = new Map();
-    for (const leg of rawDisplayLegs) {
-      // Normalize flight number to digits-only (strips "Delta"/"DL"/"AA" prefix variants)
-      const flightDigits = leg.flightNumber
-        ? leg.flightNumber.replace(/\s+/g, "").replace(/^[A-Za-z]+(\d+)$/, "$1")
-        : "";
-      // Resolve destination to city name so "MSP" and "Minneapolis" hash the same
-      const destRaw = leg.toCode || leg.to || leg.city || "";
-      const dest = (AIRPORT_CITIES[destRaw.toUpperCase()] || destRaw).toLowerCase();
-      // Trains: key on date + departure time only — Apple Wallet and Amtrak app events
-      // for the same train have opposite city orientations (dest vs origin) so dest-based
-      // keys won't match. Departure time is the reliable shared field.
-      // Flights: key on date + normalized flight number + resolved destination city.
-      const key = leg.mode === "train"
-        ? `${leg.start}|train|${leg.departure || ""}`
-        : `${leg.start}|flight|${flightDigits || dest}|${dest}`;
-      if (legGroups.has(key)) {
-        const existing = legGroups.get(key);
-        // Merge: Flighty legs are more authoritative — prefer whichever has more detail
-        // (measured by non-null field count) and fill any remaining gaps from the other.
-        const existingScore = Object.values(existing).filter(v => v != null).length;
-        const newScore      = Object.values(leg).filter(v => v != null).length;
-        const [primary, secondary] = newScore > existingScore ? [leg, existing] : [existing, leg];
-        const merged = { ...primary };
-        for (const [k, v] of Object.entries(secondary)) {
-          if (v != null && merged[k] == null) merged[k] = v;
-        }
-        legGroups.set(key, merged);
-      } else {
-        legGroups.set(key, { ...leg });
-      }
-    }
-    const displayLegs = [...legGroups.values()];
-
-    let trips = deduplicateTrips(mergeLegsIntoTrips(legs, homeCity));
-
-    // Filter out trips with no destination or whose destination is home
-    const homeVariants = buildHomeCityVariants(homeCity);
-    trips = trips.filter(t => t.city && !isHomeCity(t.city, homeVariants)).map((trip) => {
-      const coords = getCoords(trip.city);
-      // Tag as work trip if a "Work Trip [City]" all-day event overlaps this trip's dates
-      const isWork = workMarkers.some(w =>
-        w.city.toLowerCase() === trip.city.toLowerCase() &&
-        w.start <= trip.end && w.end >= trip.start
-      );
-      return { ...trip, lat: coords?.lat || null, lng: coords?.lng || null, ...(isWork && { work: true }) };
-    });
-
-    const home = {
-      city: homeCity,
-      region: process.env.HOME_REGION || "VA",
-      lat: parseFloat(process.env.HOME_LAT) || 38.8816,
-      lng: parseFloat(process.env.HOME_LNG) || -77.091,
-    };
-
-    res.status(200).json({ ok: true, home, trips, legs: displayLegs, fetched_at: new Date().toISOString() });
+    res.status(200).json({ ok: true, home: data.home, trips: data.trips, fetched_at: data.fetched_at });
   } catch (error) {
     console.error("Calendar API error:", error.message);
     res.status(500).json({ ok: false, error: "Failed to fetch calendar data", detail: error.message });
@@ -946,3 +939,4 @@ async function handler(req, res) {
 }
 
 module.exports = handler;
+module.exports.fetchData = fetchData;
