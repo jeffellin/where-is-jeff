@@ -625,6 +625,10 @@ function mergeLegsIntoTrips(legs, homeCity) {
         if (currentTrip._pendingDeparture && !currentTrip.city && legOrigin && legOrigin !== "home") {
           currentTrip.city = legOrigin;
         }
+        // Same-day closure of a city-to-city trip = connecting stop, not a real destination
+        if (currentTrip._fromHome && currentTrip.start === leg.start) {
+          currentTrip._layover = true;
+        }
         // Close the trip at this leg's departure (you leave the destination now)
         currentTrip.end = leg.start;
         result.push({ ...currentTrip });
@@ -651,6 +655,10 @@ function mergeLegsIntoTrips(legs, homeCity) {
         result.push({ ...currentTrip });
       } else if (currentTrip && currentTrip.city) {
         // Close the current segment at this leg's departure
+        // Same-day closure = connecting stop, not a real destination
+        if (currentTrip._fromHome && currentTrip.start === leg.start) {
+          currentTrip._layover = true;
+        }
         currentTrip.end = leg.start;
         result.push({ ...currentTrip });
       }
@@ -694,7 +702,7 @@ function mergeLegsIntoTrips(legs, homeCity) {
     }
   }
 
-  // Clean up internal-only flags (keep _fromHome so deduplicateTrips can use it)
+  // Clean up internal-only flags (keep _fromHome and _layover so deduplicateTrips can use them)
   return result.map(t => {
     const { _pendingDeparture, _orphanReturn, ...clean } = t;
     return clean;
@@ -797,8 +805,8 @@ function deduplicateTrips(trips) {
   // Remove trips with no resolved destination, and same-day flight layovers (but keep orphaned
   // returns and trips that genuinely departed from home — those aren't layovers).
   const filtered = trips
-    .filter(t => t.city && (t.mode !== "flight" || t.start !== t.end || t._orphanReturn || t._fromHome))
-    .map(({ _fromHome, ...t }) => t);
+    .filter(t => t.city && !t._layover && (t.mode !== "flight" || t.start !== t.end || t._orphanReturn || t._fromHome))
+    .map(({ _fromHome, _layover, ...t }) => t);
 
   // Merge consecutive trips to the same city with overlapping or adjacent dates
   const sorted = [...filtered].sort((a, b) => a.start.localeCompare(b.start));
