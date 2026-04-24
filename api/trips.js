@@ -854,7 +854,9 @@ async function fetchData() {
   const events = response.data.items || [];
   const homeCity = process.env.HOME_CITY || "Arlington";
 
-  const allParsed = events.map(parseEvent).filter(Boolean);
+  const allParsed = events
+    .filter(e => !/friend/i.test(e.summary || ""))
+    .map(parseEvent).filter(Boolean);
   const workMarkers = allParsed.filter(l => l._workMarker);
   const legs = allParsed.filter(l => !l._workMarker);
 

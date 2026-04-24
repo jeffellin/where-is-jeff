@@ -269,6 +269,11 @@
       white-space: nowrap;
     }
 
+    /* ── Tappable main card ── */
+    .card--tappable { cursor: pointer; transition: box-shadow 0.15s, border-color 0.15s; }
+    .card--tappable:hover { box-shadow: 0 8px 32px rgba(0,0,0,0.3), 0 0 0 1px rgba(232,121,82,0.25); border-color: rgba(232,121,82,0.25); }
+    .card--tappable:active { opacity: 0.9; }
+
     /* ── Show All Button ── */
     .show-all-btn {
       display: block;
@@ -907,12 +912,13 @@
           <h1 class="header__title">Where the hell is Jeff<span class="accent">?</span></h1>
         </div>
 
-        <div class="card">
+        <div class="card${status.type === 'current' ? ' card--tappable' : ''}" id="main-card">
           ${buildMapHtml(currentLat, currentLng, currentCity)}
           <div class="card__body">
             <div class="live">
               <div class="live__dot ${isHome ? 'live__dot--home' : 'live__dot--away'}"></div>
               <span class="live__label ${isHome ? 'live__label--home' : 'live__label--away'}">${isHome ? "Home Base" : "Traveling"}</span>
+              ${status.type === 'current' ? '<span style="margin-left:auto;font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.3);letter-spacing:0.06em;">TAP FOR DETAILS</span>' : ''}
             </div>
             <div class="city-row">
               <span>${ICONS.pin}</span>
@@ -929,6 +935,13 @@
           <div class="footer__text">Auto-synced from calendar</div>
           <div class="footer__text footer__time">Updated ${now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</div>
         </div>`;
+
+      // Make main card tappable when there's an active trip
+      if (status.type === "current") {
+        document.getElementById("main-card").addEventListener("click", () => {
+          openModal(status.trip);
+        });
+      }
 
       // Attach trip row click handlers after rendering
       function attachTripHandlers() {
