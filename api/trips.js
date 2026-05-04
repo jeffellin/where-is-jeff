@@ -534,6 +534,46 @@ function prevDay(dateStr) {
   return d.toISOString().slice(0, 10);
 }
 
+function nextDay(dateStr) {
+  const d = new Date(dateStr + "T12:00:00");
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+// ── Split trips that partially overlap a work marker ──
+// Handles back-to-back personal+work (or work+personal) stays where there is
+// only a single outbound flight, so the merger can't detect two separate trips.
+// The work marker's boundary becomes the split point.
+function splitTripsAtWorkBoundaries(trips, workMarkers) {
+  const result = [];
+  for (const trip of trips) {
+    const partial = workMarkers.filter(w => {
+      if (w.city.toLowerCase() !== trip.city.toLowerCase()) return false;
+      const overlaps = w.start <= trip.end && w.end >= trip.start;
+      const fullyCovers = w.start <= trip.start && w.end >= trip.end;
+      return overlaps && !fullyCovers;
+    });
+
+    if (partial.length === 0) { result.push(trip); continue; }
+
+    // Collect split boundaries: marker.start if it falls inside the trip,
+    // and day-after-marker.end if the marker ends before the trip does.
+    const splitPoints = new Set();
+    for (const m of partial) {
+      if (m.start > trip.start) splitPoints.add(m.start);
+      if (m.end < trip.end)    splitPoints.add(nextDay(m.end));
+    }
+
+    const boundaries = [trip.start, ...[...splitPoints].sort()];
+    for (let i = 0; i < boundaries.length; i++) {
+      const segStart = boundaries[i];
+      const segEnd   = i + 1 < boundaries.length ? prevDay(boundaries[i + 1]) : trip.end;
+      if (segStart <= segEnd) result.push({ ...trip, start: segStart, end: segEnd });
+    }
+  }
+  return result;
+}
+
 function mergeLegsIntoTrips(legs, homeCity) {
   const homeVariants = buildHomeCityVariants(homeCity);
   const result = [];
@@ -903,6 +943,7 @@ async function fetchData() {
   const displayLegs = [...legGroups.values()];
 
   let trips = deduplicateTrips(mergeLegsIntoTrips(legs, homeCity));
+  trips = splitTripsAtWorkBoundaries(trips, workMarkers);
 
   const homeVariants = buildHomeCityVariants(homeCity);
   trips = trips.filter(t => t.city && !isHomeCity(t.city, homeVariants)).map((trip) => {
