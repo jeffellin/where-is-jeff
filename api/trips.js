@@ -528,6 +528,12 @@ function isHomeCity(city, homeVariants) {
  *   - If city = home → this is a departure FROM home (outbound)
  *   - If city ≠ home → this is a departure FROM destination (return)
  */
+function prevDay(dateStr) {
+  const d = new Date(dateStr + "T12:00:00");
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 function mergeLegsIntoTrips(legs, homeCity) {
   const homeVariants = buildHomeCityVariants(homeCity);
   const result = [];
@@ -578,14 +584,18 @@ function mergeLegsIntoTrips(legs, homeCity) {
 
     if (originIsHome && !destIsHome && legDest) {
       // ── LEAVING HOME for a known destination ──
-      if (currentTrip && currentTrip.city &&
-          currentTrip.city.toLowerCase() === legDest.toLowerCase()) {
-        // Already tracking a trip to this city (e.g. backup/alternate flight) —
-        // absorb the leg into the existing trip rather than closing and reopening
+      const sameCity = currentTrip?.city?.toLowerCase() === legDest.toLowerCase();
+      const adjacent = sameCity && leg.start <= currentTrip.end;
+      if (sameCity && adjacent) {
+        // Backup/alternate flight for the same trip — absorb
         if (leg.end > currentTrip.end) currentTrip.end = leg.end;
       } else {
         if (currentTrip) {
-          // Close any open trip (shouldn't normally happen)
+          if (sameCity) {
+            // Back-to-back trips to the same city: close the first trip the day before
+            // the new departure so leg date ranges don't bleed into each other.
+            currentTrip.end = prevDay(leg.start);
+          }
           result.push({ ...currentTrip });
         }
         currentTrip = {
@@ -593,7 +603,7 @@ function mergeLegsIntoTrips(legs, homeCity) {
           start: leg.start,
           end: leg.end,
           mode: leg.mode,
-          _fromHome: true, // real trip, not a connecting layover
+          _fromHome: true,
         };
       }
 
