@@ -87,7 +87,8 @@ function extractCityFromStationName(stationName) {
 const AIRPORT_CITIES = {
   // US Major
   LAX: "Los Angeles", SFO: "San Francisco", OAK: "Oakland",
-  JFK: "New York", EWR: "Newark", LGA: "New York",
+  JFK: "New York", EWR: "Newark", LGA: "New York", NYC: "New York",
+  "NEW YORK NY": "New York",
   ORD: "Chicago", MDW: "Chicago",
   ATL: "Atlanta", DFW: "Dallas", DAL: "Dallas",
   DEN: "Denver", SEA: "Seattle", PDX: "Portland",
@@ -980,8 +981,8 @@ async function handler(req, res) {
   try {
     const data = await fetchData();
 
-    // Debug mode: /api/trips?debug=1 shows raw events
-    if (req.query && req.query.debug === "1") {
+    // Debug mode: /api/trips?debug=1 shows raw events (only when WJ_DEBUG=1 env var is set)
+    if (process.env.WJ_DEBUG === "1" && req.query && req.query.debug === "1") {
       const raw = data.events.map(e => ({
         summary: e.summary,
         location: e.location,
