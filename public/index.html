@@ -247,6 +247,7 @@
     .trip-row__icon--flight { background: rgba(232,121,82,0.15); color: var(--accent); }
     .trip-row__icon--train { background: rgba(96,165,250,0.15); color: var(--blue); }
     .trip-row__icon--drive { background: rgba(74,222,128,0.15); color: var(--green); }
+    .trip-row__icon--cruise { background: rgba(96,165,250,0.15); color: var(--blue); }
     .trip-row__city { font-size: 16px; font-weight: 500; color: #fff; display: flex; align-items: center; gap: 8px; }
     .work-badge {
       font-size: 9px;
@@ -257,6 +258,19 @@
       color: var(--accent);
       background: rgba(232,121,82,0.12);
       border: 1px solid rgba(232,121,82,0.25);
+      border-radius: 4px;
+      padding: 2px 6px;
+      flex-shrink: 0;
+    }
+    .cruise-badge {
+      font-size: 9px;
+      font-family: var(--mono);
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--blue);
+      background: rgba(96,165,250,0.12);
+      border: 1px solid rgba(96,165,250,0.25);
       border-radius: 4px;
       padding: 2px 6px;
       flex-shrink: 0;
@@ -699,6 +713,7 @@
       train: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="16" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="M8 19l-2 3"/><path d="M16 19l2 3"/><circle cx="8" cy="15" r="1"/><circle cx="16" cy="15" r="1"/></svg>`,
       home: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
       car: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14M5 17a2 2 0 01-2-2V9a2 2 0 012-2h1l2-3h8l2 3h1a2 2 0 012 2v6a2 2 0 01-2 2M5 17v2m14-2v2"/><circle cx="7.5" cy="14" r="1.5"/><circle cx="16.5" cy="14" r="1.5"/></svg>`,
+      boat: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4v6"/><path d="M4 10h16v5H4z"/><path d="M2 15h20l-2 5H2z"/></svg>`,
     };
 
     function modeIcon(mode) {
@@ -878,9 +893,9 @@
           return `
             <div class="trip-row" style="animation: slideIn 0.5s ease-out ${0.1 + i*0.1}s both;" data-trip-idx="${i}">
               <div class="trip-row__left">
-                <div class="trip-row__icon trip-row__icon--${modeClass(trip.mode)}">${modeIcon(trip.mode)}</div>
+                <div class="trip-row__icon trip-row__icon--${trip.cruise ? 'cruise' : modeClass(trip.mode)}">${trip.cruise ? ICONS.boat : modeIcon(trip.mode)}</div>
                 <div>
-                  <div class="trip-row__city">${trip.city}${trip.work ? '<span class="work-badge">Work</span>' : ''}</div>
+                  <div class="trip-row__city">${trip.city}${trip.work ? '<span class="work-badge">Work</span>' : ''}${trip.cruise ? `<span class="cruise-badge">${trip.cruise}</span>` : ''}</div>
                   <div class="trip-row__dates">${formatDate(trip.start)} – ${formatDate(trip.end)}</div>
                 </div>
               </div>

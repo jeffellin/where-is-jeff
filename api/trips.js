@@ -248,6 +248,13 @@ function parseEvent(event) {
     return { _workMarker: true, city, start, end };
   }
 
+  // ── Cruise markers ──
+  // All-day events like "Cruise: NCL Getaway"
+  const cruiseMatch = title.match(/^cruise:\s*(.+)/i);
+  if (cruiseMatch) {
+    return { _cruiseMarker: true, ship: cruiseMatch[1].trim(), start, end };
+  }
+
   // ── Flighty events ──
   // Title format: "✈ DCA→LAX • AA 3283" (after stripping zero-width chars)
   // Match any 3-letter airport code pair separated by arrow-like characters
@@ -909,7 +916,8 @@ async function fetchData() {
     .filter(e => !/friend/i.test(e.summary || ""))
     .map(parseEvent).filter(Boolean);
   const workMarkers = allParsed.filter(l => l._workMarker);
-  const legs = allParsed.filter(l => !l._workMarker);
+  const cruiseMarkers = allParsed.filter(l => l._cruiseMarker);
+  const legs = allParsed.filter(l => !l._workMarker && !l._cruiseMarker);
 
   const rawDisplayLegs = legs
     .filter(l => l._detail)
@@ -953,7 +961,16 @@ async function fetchData() {
       w.city.toLowerCase() === trip.city.toLowerCase() &&
       w.start <= trip.end && w.end >= trip.start
     );
-    return { ...trip, lat: coords?.lat || null, lng: coords?.lng || null, ...(isWork && { work: true }) };
+    const cruiseMarker = cruiseMarkers.find(c =>
+      c.start <= trip.end && c.end >= trip.start
+    );
+    return {
+      ...trip,
+      lat: coords?.lat || null,
+      lng: coords?.lng || null,
+      ...(isWork && { work: true }),
+      ...(cruiseMarker && { cruise: cruiseMarker.ship }),
+    };
   });
 
   const home = {
