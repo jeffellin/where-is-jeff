@@ -125,6 +125,25 @@ const AIRPORT_CITIES = {
   CAI: "Cairo", JNB: "Johannesburg", CPT: "Cape Town",
 };
 
+// ── City name aliases (for normalizing informal names to canonical forms) ──
+const CITY_ALIASES = {
+  "WASHINGTON":       "Washington DC",
+  "WASHINGTON D.C.":  "Washington DC",
+  "D.C.":             "Washington DC",
+  "DC":               "Washington DC",
+  "NEW YORK CITY":    "New York",
+  "NEW YORK, NY":     "New York",
+  "LA":               "Los Angeles",
+  "SF":               "San Francisco",
+  "PHILLY":           "Philadelphia",
+};
+
+function normalizeCity(raw) {
+  if (!raw) return "";
+  const upper = raw.toUpperCase().trim();
+  return (AIRPORT_CITIES[upper] || CITY_ALIASES[upper] || raw).toLowerCase().trim();
+}
+
 // ── US state abbreviations ──
 const US_STATES = new Set([
   "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN",
@@ -931,7 +950,7 @@ async function fetchData() {
       ? leg.flightNumber.replace(/\s+/g, "").replace(/^[A-Za-z]+(\d+)$/, "$1")
       : "";
     const destRaw = leg.toCode || leg.to || leg.city || "";
-    const dest = (AIRPORT_CITIES[destRaw.toUpperCase()] || destRaw).toLowerCase();
+    const dest = normalizeCity(destRaw);
     const key = leg.mode === "train"
       ? `${leg.start}|train|${leg.departure || ""}`
       : `${leg.start}|flight|${flightDigits || dest}|${dest}`;
@@ -949,6 +968,31 @@ async function fetchData() {
       legGroups.set(key, { ...leg });
     }
   }
+
+  // Second pass: merge manual legs (no flight number) into Flighty legs (with flight number)
+  // when they share the same departure date and normalized destination. This handles the case
+  // where a Flighty import and a manual calendar event both describe the same leg.
+  const flightLegsByDateDest = new Map();
+  for (const [key, leg] of legGroups.entries()) {
+    if (leg.flightNumber) {
+      const dest = normalizeCity(leg.toCode || leg.to || leg.city);
+      flightLegsByDateDest.set(`${leg.start}|${dest}`, key);
+    }
+  }
+  for (const [key, leg] of [...legGroups.entries()]) {
+    if (!leg.flightNumber && leg.mode !== "train") {
+      const dest = normalizeCity(leg.toCode || leg.to || leg.city);
+      const flightKey = flightLegsByDateDest.get(`${leg.start}|${dest}`);
+      if (flightKey) {
+        const flightLeg = legGroups.get(flightKey);
+        for (const [k, v] of Object.entries(leg)) {
+          if (v != null && flightLeg[k] == null) flightLeg[k] = v;
+        }
+        legGroups.delete(key);
+      }
+    }
+  }
+
   const displayLegs = [...legGroups.values()];
 
   let trips = deduplicateTrips(mergeLegsIntoTrips(legs, homeCity));
