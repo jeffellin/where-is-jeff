@@ -275,6 +275,19 @@
       padding: 2px 6px;
       flex-shrink: 0;
     }
+    .tbd-badge {
+      font-size: 9px;
+      font-family: var(--mono);
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #C084FC;
+      background: rgba(192,132,252,0.12);
+      border: 1px solid rgba(192,132,252,0.25);
+      border-radius: 4px;
+      padding: 2px 6px;
+      flex-shrink: 0;
+    }
     .trip-row__dates { font-size: 13px; color: rgba(255,255,255,0.55); margin-top: 2px; }
     .trip-row__countdown {
       font-size: 12px;
@@ -742,13 +755,14 @@
     }
 
     function getCurrentStatus(trips, home) {
+      const confirmed = trips.filter(t => !t.tbd);
       const today = new Date(); today.setHours(0,0,0,0);
-      for (const trip of trips) {
+      for (const trip of confirmed) {
         const s = new Date(trip.start + "T00:00:00");
         const e = new Date(trip.end + "T00:00:00");
         if (today >= s && today < e) return { type: "current", trip };
       }
-      const upcoming = trips.filter(t => new Date(t.start + "T00:00:00") > today)
+      const upcoming = confirmed.filter(t => new Date(t.start + "T00:00:00") > today)
         .sort((a, b) => new Date(a.start) - new Date(b.start));
       if (upcoming.length > 0) return { type: "home_until", nextTrip: upcoming[0] };
       return { type: "home" };
@@ -890,12 +904,19 @@
         window.__upcomingTrips = allUpcoming;
         const renderRows = (trips) => trips.map((trip, i) => {
           const days = daysUntil(trip.start);
+          const iconClass = trip.tbd ? 'flight' : trip.cruise ? 'cruise' : modeClass(trip.mode);
+          const icon = trip.tbd ? modeIcon(trip.mode) : trip.cruise ? ICONS.boat : modeIcon(trip.mode);
+          const badges = [
+            trip.tbd   ? '<span class="tbd-badge">TBD</span>'           : '',
+            trip.work  ? '<span class="work-badge">Work</span>'          : '',
+            trip.cruise ? `<span class="cruise-badge">${trip.cruise}</span>` : '',
+          ].join('');
           return `
-            <div class="trip-row" style="animation: slideIn 0.5s ease-out ${0.1 + i*0.1}s both;" data-trip-idx="${i}">
+            <div class="trip-row" style="animation: slideIn 0.5s ease-out ${0.1 + i*0.1}s both;${trip.tbd ? 'opacity:0.75;' : ''}" data-trip-idx="${i}">
               <div class="trip-row__left">
-                <div class="trip-row__icon trip-row__icon--${trip.cruise ? 'cruise' : modeClass(trip.mode)}">${trip.cruise ? ICONS.boat : modeIcon(trip.mode)}</div>
+                <div class="trip-row__icon trip-row__icon--${iconClass}">${icon}</div>
                 <div>
-                  <div class="trip-row__city">${trip.city}${trip.work ? '<span class="work-badge">Work</span>' : ''}${trip.cruise ? `<span class="cruise-badge">${trip.cruise}</span>` : ''}</div>
+                  <div class="trip-row__city">${trip.city}${badges}</div>
                   <div class="trip-row__dates">${formatDate(trip.start)} – ${formatDate(trip.end)}</div>
                 </div>
               </div>

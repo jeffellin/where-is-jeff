@@ -267,6 +267,15 @@ function parseEvent(event) {
     return { _workMarker: true, city, start, end };
   }
 
+  // ── TBD / planned trip markers ──
+  // All-day events like "TBD: SLC" or "TBD: Salt Lake City"
+  const tbdMatch = title.match(/^tbd:\s*(.+)/i);
+  if (tbdMatch) {
+    const cityRaw = tbdMatch[1].trim();
+    const city = AIRPORT_CITIES[cityRaw.toUpperCase()] || cityRaw;
+    return { _tbdMarker: true, city, start, end };
+  }
+
   // ── Cruise markers ──
   // All-day events like "Cruise: NCL Getaway"
   const cruiseMatch = title.match(/^cruise:\s*(.+)/i);
@@ -936,7 +945,8 @@ async function fetchData() {
     .map(parseEvent).filter(Boolean);
   const workMarkers = allParsed.filter(l => l._workMarker);
   const cruiseMarkers = allParsed.filter(l => l._cruiseMarker);
-  const legs = allParsed.filter(l => !l._workMarker && !l._cruiseMarker);
+  const tbdMarkers = allParsed.filter(l => l._tbdMarker);
+  const legs = allParsed.filter(l => !l._workMarker && !l._cruiseMarker && !l._tbdMarker);
 
   const rawDisplayLegs = legs
     .filter(l => l._detail)
@@ -1024,13 +1034,33 @@ async function fetchData() {
     lng: parseFloat(process.env.HOME_LNG) || -77.091,
   };
 
+  // Add TBD (planned, unbooked) trips
+  const tbdTrips = tbdMarkers
+    .filter(m => m.city && !isHomeCity(m.city, homeVariants))
+    .map(m => {
+      const coords = getCoords(m.city);
+      return {
+        city: m.city,
+        start: m.start,
+        end: m.end,
+        mode: "flight",
+        tbd: true,
+        lat: coords?.lat || null,
+        lng: coords?.lng || null,
+        legs: [],
+      };
+    });
+
   // Nest legs under their parent trip
   const tripsWithLegs = trips.map(trip => ({
     ...trip,
     legs: displayLegs.filter(l => l.start >= trip.start && l.start <= trip.end),
   }));
 
-  return { home, trips: tripsWithLegs, events, fetched_at: new Date().toISOString() };
+  const allTrips = [...tripsWithLegs, ...tbdTrips]
+    .sort((a, b) => a.start.localeCompare(b.start));
+
+  return { home, trips: allTrips, events, fetched_at: new Date().toISOString() };
 }
 
 // ── Main handler ──
