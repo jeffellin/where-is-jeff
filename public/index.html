@@ -319,6 +319,29 @@
     }
     .show-all-btn:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.7); }
 
+    /* ── Copy Link Button ── */
+    .copy-link-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      margin-top: 10px;
+      padding: 10px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      color: rgba(255,255,255,0.45);
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .copy-link-btn:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.7); }
+    .copy-link-btn.copied { color: var(--green); border-color: rgba(74,222,128,0.25); }
+    .copy-link-btn svg { flex-shrink: 0; }
+
     /* ── Footer ── */
     .footer {
       margin-top: 36px;
@@ -727,6 +750,7 @@
       home: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
       car: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14M5 17a2 2 0 01-2-2V9a2 2 0 012-2h1l2-3h8l2 3h1a2 2 0 012 2v6a2 2 0 01-2 2M5 17v2m14-2v2"/><circle cx="7.5" cy="14" r="1.5"/><circle cx="16.5" cy="14" r="1.5"/></svg>`,
       boat: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4v6"/><path d="M4 10h16v5H4z"/><path d="M2 15h20l-2 5H2z"/></svg>`,
+      link: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>`,
     };
 
     function modeIcon(mode) {
@@ -967,6 +991,8 @@
 
         ${upcomingHtml}
 
+        <button class="copy-link-btn" id="copy-link-btn">${ICONS.link}<span id="copy-link-btn-text">Copy Link</span></button>
+
         <div class="footer">
           <div class="footer__text">Auto-synced from calendar</div>
           <div class="footer__text footer__time">Updated ${now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</div>
@@ -992,6 +1018,38 @@
 
       const showAllBtn = document.getElementById("show-all-btn");
       if (showAllBtn) showAllBtn.addEventListener("click", window.__renderAllTrips);
+
+      // Copy shareable link with the current pin
+      const copyLinkBtn = document.getElementById("copy-link-btn");
+      if (copyLinkBtn) {
+        copyLinkBtn.addEventListener("click", async () => {
+          const pinMatch = document.cookie.match(/(?:^|;\s*)auth_pin=([^;]+)/);
+          const pin = pinMatch ? decodeURIComponent(pinMatch[1]) : "";
+          const shareUrl = pin
+            ? `https://whereisjeff.ellin.com?pin=${encodeURIComponent(pin)}`
+            : `https://whereisjeff.ellin.com`;
+          const label = document.getElementById("copy-link-btn-text");
+          try {
+            await navigator.clipboard.writeText(shareUrl);
+          } catch (err) {
+            const temp = document.createElement("textarea");
+            temp.value = shareUrl;
+            temp.style.position = "fixed";
+            temp.style.opacity = "0";
+            document.body.appendChild(temp);
+            temp.select();
+            document.execCommand("copy");
+            document.body.removeChild(temp);
+          }
+          copyLinkBtn.classList.add("copied");
+          const prevText = label.textContent;
+          label.textContent = "Copied!";
+          setTimeout(() => {
+            copyLinkBtn.classList.remove("copied");
+            label.textContent = prevText;
+          }, 1800);
+        });
+      }
     }
 
     function renderError(err) {
