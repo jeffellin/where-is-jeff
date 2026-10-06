@@ -155,6 +155,17 @@ function normalizeCity(raw) {
   return (AIRPORT_CITIES[upper] || CITY_ALIASES[upper] || raw).toLowerCase().trim();
 }
 
+// ── Resolve a marker's captured city text (Work/TBD) ──
+// Supports a plain city/code ("Toronto", "MSP") or a "<label> @ <city/code>"
+// form that keeps a personal nickname for the trip, e.g. "SKO @ FLL" (Sales
+// Kickoff at Fort Lauderdale) — only the part after "@" is used for matching.
+function resolveMarkerCity(raw) {
+  const trimmed = raw.trim();
+  const atParts = trimmed.split("@");
+  const candidate = atParts.length > 1 ? atParts[atParts.length - 1].trim() : trimmed;
+  return AIRPORT_CITIES[candidate.toUpperCase()] || CITY_ALIASES[candidate.toUpperCase()] || candidate;
+}
+
 // ── US state abbreviations ──
 const US_STATES = new Set([
   "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN",
@@ -273,25 +284,31 @@ function parseEvent(event) {
   // All-day events like "Work Trip MSP" or "Work Trip Minneapolis"
   const workMatch = title.match(/^work\s+trip\s+(?:to\s+)?(.+)/i);
   if (workMatch) {
-    const cityRaw = workMatch[1].trim();
-    const city = AIRPORT_CITIES[cityRaw.toUpperCase()] || CITY_ALIASES[cityRaw.toUpperCase()] || cityRaw;
+    const city = resolveMarkerCity(workMatch[1]);
     return { _workMarker: true, city, start, end };
   }
 
   // ── TBD / planned trip markers ──
-  // All-day events like "TBD: SLC" or "TBD: Salt Lake City"
+  // All-day events like "TBD: SLC", "TBD: Salt Lake City", or "TBD: SKO @ FLL"
+  // (a nickname before "@" is kept for your own reference but ignored for city matching)
   const tbdMatch = title.match(/^tbd:\s*(.+)/i);
   if (tbdMatch) {
-    const cityRaw = tbdMatch[1].trim();
-    const city = AIRPORT_CITIES[cityRaw.toUpperCase()] || cityRaw;
+    const city = resolveMarkerCity(tbdMatch[1]);
     return { _tbdMarker: true, city, start, end };
   }
 
   // ── Cruise markers ──
-  // All-day events like "Cruise: NCL Getaway"
+  // All-day events like "Cruise: NCL Getaway" or "Cruise: NCL Joy @ MIA".
+  // A port city after "@" scopes the tag to that city only (like Work/TBD) —
+  // without one, the tag falls back to matching by date overlap alone, which
+  // can bleed onto an unrelated trip that happens to share a boundary date.
   const cruiseMatch = title.match(/^cruise:\s*(.+)/i);
   if (cruiseMatch) {
-    return { _cruiseMarker: true, ship: cruiseMatch[1].trim(), start, end };
+    const raw = cruiseMatch[1].trim();
+    const atIndex = raw.lastIndexOf("@");
+    const ship = (atIndex === -1 ? raw : raw.slice(0, atIndex)).trim();
+    const city = atIndex === -1 ? null : resolveMarkerCity(raw.slice(atIndex + 1));
+    return { _cruiseMarker: true, ship, city, start, end };
   }
 
   // ── Flighty events ──
@@ -593,17 +610,20 @@ function nextDay(dateStr) {
   return d.toISOString().slice(0, 10);
 }
 
-// ── Split trips that partially overlap a work marker ──
-// Handles back-to-back personal+work (or work+personal) stays where there is
-// only a single outbound flight, so the merger can't detect two separate trips.
-// The work marker's boundary becomes the split point.
-function splitTripsAtWorkBoundaries(trips, workMarkers) {
+// ── Split trips that partially overlap a marker (Work or Cruise) ──
+// Handles back-to-back stays where there is only a single outbound flight (or
+// no flight at all, for a TBD entry), so the merger can't detect two separate
+// trips on its own — e.g. a work trip immediately followed by a cruise in the
+// same port city. The marker's boundary becomes the split point.
+// `requireCityMatch` is true for Work markers (city must match) and false for
+// Cruise markers (ships aren't tied to a single city, so date overlap alone qualifies).
+function splitTripsAtMarkerBoundaries(trips, markers, requireCityMatch) {
   const result = [];
   for (const trip of trips) {
-    const partial = workMarkers.filter(w => {
-      if (w.city.toLowerCase() !== trip.city.toLowerCase()) return false;
-      const overlaps = w.start <= trip.end && w.end >= trip.start;
-      const fullyCovers = w.start <= trip.start && w.end >= trip.end;
+    const partial = markers.filter(m => {
+      if (requireCityMatch && m.city.toLowerCase() !== trip.city.toLowerCase()) return false;
+      const overlaps = m.start <= trip.end && m.end >= trip.start;
+      const fullyCovers = m.start <= trip.start && m.end >= trip.end;
       return overlaps && !fullyCovers;
     });
 
@@ -946,15 +966,27 @@ async function fetchData() {
   const timeMin = new Date(now); timeMin.setDate(timeMin.getDate() - 30);
   const timeMax = new Date(now); timeMax.setDate(timeMax.getDate() + 365);
 
-  const response = await calendar.events.list({
-    calendarId: process.env.GOOGLE_CALENDAR_ID,
-    timeMin: timeMin.toISOString(),
-    timeMax: timeMax.toISOString(),
-    singleEvents: true,
-    orderBy: "startTime",
-  });
+  // The Calendar API caps a single page at 250 events by default and silently
+  // truncates the rest — with singleEvents + orderBy startTime, truncation
+  // drops the events furthest in the future first. Follow nextPageToken so a
+  // busy calendar doesn't lose later events (e.g. a cruise months out).
+  let items = [];
+  let pageToken;
+  do {
+    const response = await calendar.events.list({
+      calendarId: process.env.GOOGLE_CALENDAR_ID,
+      timeMin: timeMin.toISOString(),
+      timeMax: timeMax.toISOString(),
+      singleEvents: true,
+      orderBy: "startTime",
+      maxResults: 2500,
+      pageToken,
+    });
+    items = items.concat(response.data.items || []);
+    pageToken = response.data.nextPageToken;
+  } while (pageToken);
 
-  const events = response.data.items || [];
+  const events = items;
   const homeCity = process.env.HOME_CITY || "Arlington";
 
   const allParsed = events
@@ -1023,7 +1055,12 @@ async function fetchData() {
   const displayLegs = [...legGroups.values()];
 
   let trips = deduplicateTrips(mergeLegsIntoTrips(legs, homeCity));
-  trips = splitTripsAtWorkBoundaries(trips, workMarkers);
+  // Only Work markers split a trip (distinguishing business days from personal
+  // ones the merger can't tell apart on its own). A cruise is just tagged onto
+  // whichever segment its dates overlap — it doesn't force its own split, so a
+  // real continuous trip that includes a cruise (e.g. fly in, cruise, fly home)
+  // stays one trip instead of fragmenting into a day-by-day breakdown.
+  trips = splitTripsAtMarkerBoundaries(trips, workMarkers, true);
 
   const homeVariants = buildHomeCityVariants(homeCity);
   trips = trips.filter(t => t.city && !isHomeCity(t.city, homeVariants)).map((trip) => {
@@ -1033,14 +1070,16 @@ async function fetchData() {
       w.start <= trip.end && w.end >= trip.start
     );
     const cruiseMarker = cruiseMarkers.find(c =>
+      (!c.city || c.city.toLowerCase() === trip.city.toLowerCase()) &&
       c.start <= trip.end && c.end >= trip.start
     );
     return {
       ...trip,
       lat: coords?.lat || null,
       lng: coords?.lng || null,
-      ...(isWork && { work: true }),
-      ...(cruiseMarker && { cruise: cruiseMarker.ship }),
+      // Cruise takes priority over work on a shared boundary day (e.g. the day
+      // a work trip ends and a cruise departs from the same port city).
+      ...(cruiseMarker ? { cruise: cruiseMarker.ship } : (isWork && { work: true })),
     };
   });
 
@@ -1052,19 +1091,32 @@ async function fetchData() {
   };
 
   // Add TBD (planned, unbooked) trips
-  const tbdTrips = tbdMarkers
-    .filter(m => m.city && !isHomeCity(m.city, homeVariants))
+  let tbdSegments = tbdMarkers.filter(m => m.city && !isHomeCity(m.city, homeVariants));
+  tbdSegments = splitTripsAtMarkerBoundaries(tbdSegments, workMarkers, true);
+  const tbdTrips = tbdSegments
     .map(m => {
       const coords = getCoords(m.city);
+      const isWork = workMarkers.some(w =>
+        w.city.toLowerCase() === m.city.toLowerCase() &&
+        w.start <= m.end && w.end >= m.start
+      );
+      const cruiseMarker = cruiseMarkers.find(c =>
+        (!c.city || c.city.toLowerCase() === m.city.toLowerCase()) &&
+        c.start <= m.end && c.end >= m.start
+      );
+      // A cruise marker resolves the segment into a known, booked activity —
+      // it's no longer "to be determined," and it isn't a work trip either.
       return {
         city: m.city,
         start: m.start,
         end: m.end,
         mode: "flight",
-        tbd: true,
         lat: coords?.lat || null,
         lng: coords?.lng || null,
         legs: [],
+        ...(cruiseMarker
+          ? { cruise: cruiseMarker.ship }
+          : { tbd: true, ...(isWork && { work: true }) }),
       };
     });
 

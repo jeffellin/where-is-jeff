@@ -928,8 +928,8 @@
         window.__upcomingTrips = allUpcoming;
         const renderRows = (trips) => trips.map((trip, i) => {
           const days = daysUntil(trip.start);
-          const iconClass = trip.tbd ? 'flight' : trip.cruise ? 'cruise' : modeClass(trip.mode);
-          const icon = trip.tbd ? modeIcon(trip.mode) : trip.cruise ? ICONS.boat : modeIcon(trip.mode);
+          const iconClass = trip.cruise ? 'cruise' : trip.tbd ? 'flight' : modeClass(trip.mode);
+          const icon = trip.cruise ? ICONS.boat : trip.tbd ? modeIcon(trip.mode) : modeIcon(trip.mode);
           const badges = [
             trip.tbd   ? '<span class="tbd-badge">TBD</span>'           : '',
             trip.work  ? '<span class="work-badge">Work</span>'          : '',
