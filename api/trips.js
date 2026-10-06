@@ -107,20 +107,31 @@ const AIRPORT_CITIES = {
   SJC: "San Jose", SMF: "Sacramento", BUR: "Burbank",
   HNL: "Honolulu", OGG: "Maui", LAS: "Las Vegas",
   MSP: "Minneapolis",
+  SAT: "San Antonio", ABQ: "Albuquerque", OMA: "Omaha", BOI: "Boise",
+  ANC: "Anchorage", RNO: "Reno", OKC: "Oklahoma City", TUL: "Tulsa",
+  // Canada & Mexico
+  YYZ: "Toronto", YVR: "Vancouver", YUL: "Montreal",
+  YOW: "Ottawa", YYC: "Calgary", YEG: "Edmonton",
+  YWG: "Winnipeg", YHZ: "Halifax", YQB: "Quebec City",
+  MEX: "Mexico City", CUN: "Cancún", GDL: "Guadalajara",
+  MTY: "Monterrey", SJD: "Los Cabos", PVR: "Puerto Vallarta",
+  TIJ: "Tijuana",
   // International
   NRT: "Tokyo", HND: "Tokyo", KIX: "Osaka",
-  LHR: "London", LGW: "London", STN: "London",
+  LHR: "London", LGW: "London", STN: "London", LCY: "London",
   CDG: "Paris", ORY: "Paris",
-  FCO: "Rome", MXP: "Milan",
+  FCO: "Rome", MXP: "Milan", LIN: "Milan", VCE: "Venice", NAP: "Naples",
   BCN: "Barcelona", MAD: "Madrid",
-  AMS: "Amsterdam", FRA: "Frankfurt", MUC: "Munich",
-  ZRH: "Zurich", VIE: "Vienna", CPH: "Copenhagen",
-  DUB: "Dublin", LIS: "Lisbon", ATH: "Athens",
+  AMS: "Amsterdam", FRA: "Frankfurt", MUC: "Munich", HAM: "Hamburg", BER: "Berlin",
+  ZRH: "Zurich", GVA: "Geneva", VIE: "Vienna", CPH: "Copenhagen",
+  DUB: "Dublin", LIS: "Lisbon", OPO: "Porto", ATH: "Athens",
+  BRU: "Brussels", ARN: "Stockholm", OSL: "Oslo", HEL: "Helsinki",
+  WAW: "Warsaw", PRG: "Prague", BUD: "Budapest",
+  EDI: "Edinburgh", MAN: "Manchester", NCE: "Nice",
   ICN: "Seoul", HKG: "Hong Kong", SIN: "Singapore",
   BKK: "Bangkok", SYD: "Sydney", MEL: "Melbourne", AKL: "Auckland",
-  MEX: "Mexico City", CUN: "Cancún", GRU: "São Paulo",
+  GRU: "São Paulo",
   BOG: "Bogotá", LIM: "Lima", SCL: "Santiago",
-  YYZ: "Toronto", YVR: "Vancouver", YUL: "Montreal",
   DXB: "Dubai", DOH: "Doha", TLV: "Tel Aviv",
   CAI: "Cairo", JNB: "Johannesburg", CPT: "Cape Town",
 };
@@ -263,7 +274,7 @@ function parseEvent(event) {
   const workMatch = title.match(/^work\s+trip\s+(?:to\s+)?(.+)/i);
   if (workMatch) {
     const cityRaw = workMatch[1].trim();
-    const city = AIRPORT_CITIES[cityRaw.toUpperCase()] || cityRaw;
+    const city = AIRPORT_CITIES[cityRaw.toUpperCase()] || CITY_ALIASES[cityRaw.toUpperCase()] || cityRaw;
     return { _workMarker: true, city, start, end };
   }
 
@@ -480,10 +491,16 @@ function parseEvent(event) {
     }
   }
 
-  // "[City] Trip" or "Trip to [City]"
+  // "Trip to [City]" (checked first so "Work Trip to Toronto" yields "Toronto", not "Work")
+  // or "[City] Trip"
   if (!city) {
-    const tripMatch = title.match(/(?:trip\s+to\s+(.+)|(.+?)\s+trip)/i);
-    if (tripMatch) city = (tripMatch[1] || tripMatch[2]).trim();
+    const tripToMatch = title.match(/\btrip\s+to\s+(.+)/i);
+    if (tripToMatch) {
+      city = tripToMatch[1].trim();
+    } else {
+      const cityTripMatch = title.match(/^(.+?)\s+trip$/i);
+      if (cityTripMatch) city = cityTripMatch[1].trim();
+    }
   }
 
   if (mode !== "train" && /amtrak|train/i.test(title)) mode = "train";
